@@ -481,9 +481,17 @@
         v-if="displayedEpisodesTimeSpent > 0 && displayedEpisodesEstimation > 0"
       >
         ({{ formatDuration(displayedEpisodesTimeSpent) }}
-        {{ $tc('main.days_spent', displayedEpisodesTimeSpent) }},
+        {{
+          isDurationInHours
+            ? $tc('main.hours_spent', displayedEpisodesTimeSpent)
+            : $tc('main.days_spent', displayedEpisodesTimeSpent)
+        }},
         {{ formatDuration(displayedEpisodesEstimation) }}
-        {{ $tc('main.man_days', displayedEpisodesEstimation) }})
+        {{
+          isDurationInHours
+            ? $tc('main.hours_estimated', displayedEpisodesEstimation)
+            : $tc('main.man_days', displayedEpisodesEstimation)
+        }})
       </span>
     </p>
   </div>

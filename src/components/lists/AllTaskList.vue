@@ -148,9 +148,17 @@
       {{ stats.total }} {{ $tc('tasks.number', stats.total) }} ({{
         formatDuration(stats.total_estimation)
       }}
-      {{ $tc('main.days_estimated', isTimeEstimatedPlural) }},
+      {{
+        isDurationInHours
+          ? $tc('main.hours_estimated', isTimeEstimatedPlural)
+          : $tc('main.days_estimated', isTimeEstimatedPlural)
+      }},
       {{ formatDuration(stats.total_duration) }}
-      {{ $tc('main.days_spent', isTimeSpentPlural) }})
+      {{
+        isDurationInHours
+          ? $tc('main.hours_spent', isTimeSpentPlural)
+          : $tc('main.days_spent', isTimeSpentPlural)
+      }})
     </p>
   </div>
 </template>
@@ -248,19 +256,24 @@ export default {
     ]),
 
     isTimeSpentPlural() {
+      const divisor = this.isDurationInHours
+        ? 60
+        : 60 * this.organisation.hours_by_day
       return (
         Math.floor(
-          (this.stats.total_duration ? this.stats.total_duration : 0) / 60 / 8
+          (this.stats.total_duration ? this.stats.total_duration : 0) / divisor
         ) >= 1
       )
     },
 
     isTimeEstimatedPlural() {
+      const divisor = this.isDurationInHours
+        ? 60
+        : 60 * this.organisation.hours_by_day
       return (
         Math.floor(
           (this.stats.total_estimation ? this.stats.total_estimation : 0) /
-            60 /
-            8
+            divisor
         ) >= 1
       )
     },

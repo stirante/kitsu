@@ -468,9 +468,17 @@
       {{ displayedEditsLength }} {{ $tc('edits.number', displayedEditsLength) }}
       <span v-if="displayedEditsTimeSpent > 0 || displayedEditsEstimation > 0">
         ({{ formatDuration(displayedEditsTimeSpent) }}
-        {{ $tc('main.days_spent', displayedEditsTimeSpent) }},
+        {{
+          isDurationInHours
+            ? $tc('main.hours_spent', displayedEditsTimeSpent)
+            : $tc('main.days_spent', displayedEditsTimeSpent)
+        }},
         {{ formatDuration(displayedEditsEstimation) }}
-        {{ $tc('main.man_days', displayedEditsEstimation) }})
+        {{
+          isDurationInHours
+            ? $tc('main.hours_estimated', displayedEditsEstimation)
+            : $tc('main.man_days', displayedEditsEstimation)
+        }})
       </span>
     </p>
   </div>

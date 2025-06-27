@@ -151,7 +151,7 @@ export default {
         name: '',
         timesheets_locked: 'false',
         use_original_file_name: 'false',
-        format_duration_in_hours: 'false',
+        format_duration_in_hours: 'true',
         dark_theme_by_default: 'false'
       },
       errors: {

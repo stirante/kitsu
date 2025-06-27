@@ -682,7 +682,7 @@ export default {
     minimize: 'Minimize',
     main_pack: 'Main Pack',
     maximize: 'Maximize',
-    man_days: 'person day | person days',
+    man_days: 'person hour | person hours',
     month: 'Month',
     more_filters: 'More filters',
     move_action_bar: 'Move action bar',
@@ -1448,8 +1448,8 @@ export default {
   schedule: {
     title: 'Schedule',
     title_main: 'Main Schedule',
-    overall_man_days: 'Person-days',
-    md: 'md',
+    overall_man_days: 'Person-hours',
+    md: 'h',
     today: 'Today',
     zoom_level: 'Zoom level',
     milestone: {

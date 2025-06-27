@@ -733,9 +733,17 @@
         v-show="displayedShotsTimeSpent > 0 || displayedShotsEstimation > 0"
       >
         ({{ formatDuration(displayedShotsTimeSpent) }}
-        {{ $tc('main.days_spent', displayedShotsTimeSpent) }},
+        {{
+          isDurationInHours
+            ? $tc('main.hours_spent', displayedShotsTimeSpent)
+            : $tc('main.days_spent', displayedShotsTimeSpent)
+        }},
         {{ formatDuration(displayedShotsEstimation) }}
-        {{ $tc('main.man_days', displayedShotsEstimation) }})
+        {{
+          isDurationInHours
+            ? $tc('main.hours_estimated', displayedShotsEstimation)
+            : $tc('main.man_days', displayedShotsEstimation)
+        }})
       </span>
     </p>
   </div>

@@ -452,9 +452,17 @@
         "
       >
         ({{ formatDuration(displayedSequencesTimeSpent) }}
-        {{ $tc('main.days_spent', displayedSequencesTimeSpent) }},
+        {{
+          isDurationInHours
+            ? $tc('main.hours_spent', displayedSequencesTimeSpent)
+            : $tc('main.days_spent', displayedSequencesTimeSpent)
+        }},
         {{ formatDuration(displayedSequencesEstimation) }}
-        {{ $tc('main.man_days', displayedSequencesEstimation) }})
+        {{
+          isDurationInHours
+            ? $tc('main.hours_estimated', displayedSequencesEstimation)
+            : $tc('main.man_days', displayedSequencesEstimation)
+        }})
       </span>
     </p>
   </div>
