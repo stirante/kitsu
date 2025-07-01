@@ -76,6 +76,7 @@ const TaskTypes = () => import('@/components/pages/TaskTypes.vue')
 const Team = () => import('@/components/pages/Team.vue')
 const TeamSchedule = () => import('@/components/pages/TeamSchedule')
 const Timesheets = () => import('@/components/pages/Timesheets.vue')
+const Timers = () => import('@/components/pages/Timers.vue')
 const WrongBrowser = () => import('@/components/pages/WrongBrowser.vue')
 
 const ADMIN_PAGES = [
@@ -352,6 +353,12 @@ export const routes = [
             name: 'timesheets-day-person'
           }
         ]
+      },
+
+      {
+        path: '/timers',
+        component: Timers,
+        name: 'timers'
       },
 
       {

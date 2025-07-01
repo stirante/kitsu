@@ -8,7 +8,8 @@
       :dark="isDarkTheme"
       :disabled-week-days="weekDaysDisabled ? [6, 0] : []"
       :disabled="disabled"
-      :enable-time-picker="false"
+      :enable-time-picker="enableTimePicker"
+      :time-picker-inline="enableTimePicker"
       :format="format"
       hide-input-icon
       :locale="user.locale.substring(0, 2)"
@@ -73,6 +74,10 @@ export default {
     withMargin: {
       default: true,
       type: Boolean
+    },
+    enableTimePicker: {
+      default: false,
+      type: Boolean
     }
   },
 
@@ -86,7 +91,7 @@ export default {
         return this.modelValue
       },
       set(value) {
-        if (value?.setHours) {
+        if (!this.enableTimePicker && value?.setHours) {
           value.setHours(0, 0, 0, 0)
         }
         this.$emit('update:modelValue', value)

@@ -1795,6 +1795,21 @@ export default {
     year: 'Year'
   },
 
+  timers: {
+    title: 'Timers',
+    date: 'Date',
+    task: 'Task',
+    project: 'Project',
+    start: 'Start',
+    stop: 'Stop',
+    start_time: 'Start time',
+    end_time: 'End time',
+    running_today: 'Day Total',
+    no_timer: 'No timers',
+    duration: 'Duration',
+    estimated: 'Estimated'
+  },
+
   days_off: {
     title: 'Days Off',
     period: 'Period',

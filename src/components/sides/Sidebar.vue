@@ -74,6 +74,13 @@
               </router-link>
             </p>
 
+            <p @click="toggleSidebar()">
+              <router-link :to="{ name: 'timers' }">
+                <kitsu-icon class="nav-icon" name="timesheets" />
+                {{ $t('timers.title') }}
+              </router-link>
+            </p>
+
             <p @click="toggleSidebar()" v-if="isCurrentUserAdmin">
               <router-link :to="{ name: 'main-schedule' }">
                 <kitsu-icon class="nav-icon" name="schedule" />

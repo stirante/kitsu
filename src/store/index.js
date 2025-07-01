@@ -29,6 +29,7 @@ import studios from '@/store/modules/studios'
 import taskStatus from '@/store/modules/taskstatus'
 import taskTypes from '@/store/modules/tasktypes'
 import tasks from '@/store/modules/tasks'
+import timers from '@/store/modules/timers'
 import user from '@/store/modules/user'
 
 const modules = {
@@ -57,6 +58,7 @@ const modules = {
   statusAutomations,
   studios,
   tasks,
+  timers,
   taskTypes,
   taskStatus,
   user

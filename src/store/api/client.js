@@ -99,6 +99,25 @@ const client = {
     })
   },
 
+  ppatch(path, data) {
+    return new Promise((resolve, reject) => {
+      superagent
+        .patch(path)
+        .send(data)
+        .end((err, res) => {
+          if (res?.statusCode === 401) {
+            errors.backToLogin()
+            reject(err)
+          } else {
+            if (err) {
+              err.body = res ? res.body : ''
+              return reject(err)
+            } else return resolve(res?.body)
+          }
+        })
+    })
+  },
+
   pdel(path, data) {
     return new Promise((resolve, reject) => {
       superagent
