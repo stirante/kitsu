@@ -69,11 +69,7 @@
                   </template>
                 </td>
                 <td>
-                  <template
-                    v-if="!currentTimer || currentTimer.id !== timer.id"
-                  >
-                    {{ formatDuration(timerDuration(timer)) }}
-                  </template>
+                  {{ formatDuration(timerDuration(timer)) }}
                 </td>
                 <td>
                   {{ formatDuration(taskById(timer.task_id).task_duration) }}/{{
@@ -208,7 +204,7 @@ export default {
     },
 
     timerDuration(timer) {
-      if (!timer.end_time) return ''
+      if (!timer.end_time) return moment().diff(timer.start_time, 'minutes')
       return moment(timer.end_time).diff(timer.start_time, 'minutes')
     },
 
@@ -218,7 +214,7 @@ export default {
 
     fetchTimers() {
       this.isLoading = true
-      this.loadTimersAction()
+      this.loadTimersAction(this.today, true)
         .then(timers => {
           this.timers = timers
           this.isLoading = false
