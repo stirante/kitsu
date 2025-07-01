@@ -4,11 +4,13 @@
       <div class="timers page">
         <div class="page-header flexrow">
           <page-title class="flexrow-item title" :text="$t('timers.title')" />
+        </div>
+        <div class="flexrow">
           <combobox
             class="flexrow-item"
             :options="taskOptions"
             v-model="selectedTask"
-            :label="$t('main.production')"
+            :label="$t('timers.task')"
             :placeholder="$t('timers.task')"
           />
           <button-simple
@@ -18,11 +20,17 @@
             @click="onStartTimer"
           />
           <div class="filler"></div>
-          <date-field
-            :can-delete="false"
-            :label="$t('timers.date')"
-            v-model="selectedDate"
-          />
+          <div class="flexrow-item current-date">
+            <date-field
+              :can-delete="false"
+              :with-margin="false"
+              v-model="selectedDate"
+            />
+          </div>
+          <div class="flexrow-item flexrow time-spent-total">
+            -&nbsp;&nbsp;
+            {{ formatDuration(totalDuration) }} {{ $t('timesheets.hours') }}
+          </div>
         </div>
         <div class="has-text-centered" v-if="isLoading">
           <spinner />
@@ -31,8 +39,23 @@
           <table class="datatable" v-if="timers.length">
             <thead class="datatable-head">
               <tr class="datatable-row-header">
-                <th>{{ $t('timers.task') }}</th>
-                <th>{{ $t('timers.project') }}</th>
+                <th
+                  scope="col"
+                  class="datatable-row-header datatable-row-header--nobd production"
+                  ref="th-prod"
+                >
+                  {{ $t('tasks.fields.production') }}
+                </th>
+                <th
+                  scope="col"
+                  class="type datatable-row-header datatable-row-header--nobd"
+                  ref="th-type"
+                >
+                  {{ $t('tasks.fields.task_type') }}
+                </th>
+                <th scope="col" class="name datatable-row-header">
+                  {{ $t('tasks.fields.entity') }}
+                </th>
                 <th>{{ $t('timers.start_time') }}</th>
                 <th>{{ $t('timers.end_time') }}</th>
                 <th>{{ $t('timers.duration') }}</th>
@@ -42,76 +65,106 @@
             </thead>
             <tbody class="datatable-body">
               <tr class="datatable-row" v-for="timer in timers" :key="timer.id">
-                <td>{{ taskName(timer.task_id) }}</td>
-                <td>{{ taskById(timer.task_id).project_name }}</td>
-                <td>
-                  <div class="date-picker-wrapper">
-                    <date-field
-                      :format="'HH:mm'"
-                      :can-delete="false"
-                      style="margin-bottom: 0"
-                      :enable-time-picker="true"
-                      v-model="timerStart[timer.id]"
-                      @update:model-value="updateStart(timer)"
-                    />
-                  </div>
-                </td>
-                <td>
-                  <template
-                    v-if="!currentTimer || currentTimer.id !== timer.id"
+                <template v-if="taskById(timer.task_id)">
+                  <th
+                    class="production datatable-row-header datatable-row-header--nobd"
+                    scope="row"
                   >
+                    <production-name-cell
+                      :entry="
+                        productionMap.get(taskById(timer.task_id).project_id)
+                      "
+                      :only-avatar="true"
+                    />
+                  </th>
+                  <task-type-cell
+                    class="type datatable-row-header datatable-row-header--nobd"
+                    :production-id="taskById(timer.task_id).project_id"
+                    :task-type="
+                      taskTypeMap.get(taskById(timer.task_id).task_type_id)
+                    "
+                  />
+                  <th class="name datatable-row-header">
+                    <router-link :to="entityPath(taskById(timer.task_id))">
+                      <div class="flexrow">
+                        <entity-thumbnail
+                          :empty-width="60"
+                          :empty-height="40"
+                          :entity="{
+                            preview_file_id: taskById(timer.task_id)
+                              .entity_preview_file_id
+                          }"
+                        />
+                        <span>
+                          {{ taskById(timer.task_id).full_entity_name }}
+                        </span>
+                      </div>
+                    </router-link>
+                  </th>
+                  <td>
                     <div class="date-picker-wrapper">
                       <date-field
                         :format="'HH:mm'"
                         :can-delete="false"
                         style="margin-bottom: 0"
                         :enable-time-picker="true"
-                        v-model="timerEnd[timer.id]"
-                        @update:model-value="updateEnd(timer)"
+                        v-model="timerStart[timer.id]"
+                        @update:model-value="updateStart(timer)"
                       />
                     </div>
-                  </template>
-                </td>
-                <td>
-                  {{ formatDuration(timerDuration(timer)) }}
-                </td>
-                <td>
-                  {{
-                    formatDuration(taskDurationWithRunning(timer.task_id))
-                  }}/{{
-                    formatDuration(taskById(timer.task_id).task_estimation)
-                  }}
-                </td>
-                <td class="end-cell" style="text-align: right">
-                  <template v-if="currentTimer && currentTimer.id === timer.id">
-                    <button-simple
-                      class="icon-button"
-                      :title="$t('timers.stop')"
-                      icon="stop"
-                      @click="onEndTimer"
-                    />
-                  </template>
-                  <template v-else>
-                    <button-simple
-                      class="icon-button discard-button"
-                      icon="trash"
-                      @click="onDelete(timer)"
-                    />
-                  </template>
-                </td>
+                  </td>
+                  <td>
+                    <template
+                      v-if="!currentTimer || currentTimer.id !== timer.id"
+                    >
+                      <div class="date-picker-wrapper">
+                        <date-field
+                          :format="'HH:mm'"
+                          :can-delete="false"
+                          style="margin-bottom: 0"
+                          :enable-time-picker="true"
+                          v-model="timerEnd[timer.id]"
+                          @update:model-value="updateEnd(timer)"
+                        />
+                      </div>
+                    </template>
+                  </td>
+                  <td>
+                    {{ formatDuration(timerDuration(timer)) }}
+                    {{ $t('timesheets.hours') }}
+                  </td>
+                  <td>
+                    {{
+                      formatDuration(taskDurationWithRunning(timer.task_id))
+                    }}/{{
+                      formatDuration(taskById(timer.task_id).task_estimation)
+                    }}
+                    {{ $t('timesheets.hours') }}
+                  </td>
+                  <td class="end-cell" style="text-align: right">
+                    <template
+                      v-if="currentTimer && currentTimer.id === timer.id"
+                    >
+                      <button-simple
+                        class="icon-button"
+                        :title="$t('timers.stop')"
+                        icon="stop"
+                        @click="onEndTimer"
+                      />
+                    </template>
+                    <template v-else>
+                      <button-simple
+                        class="icon-button discard-button"
+                        icon="trash"
+                        @click="onDelete(timer)"
+                      />
+                    </template>
+                  </td>
+                </template>
               </tr>
             </tbody>
           </table>
           <div v-else>{{ $t('timers.no_timer') }}</div>
-        </div>
-        <div class="page-footer flexrow">
-          <div class="filler"></div>
-          <span class="logged-time flexrow-item">
-            {{ $t('timers.running_today') }}:
-          </span>
-          <span class="logged-time flexrow-item">
-            {{ formatDuration(totalDuration) }}
-          </span>
         </div>
       </div>
     </div>
@@ -129,6 +182,9 @@ import PageTitle from '@/components/widgets/PageTitle.vue'
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
 import Spinner from '@/components/widgets/Spinner.vue'
 import DateField from '@/components/widgets/DateField.vue'
+import ProductionNameCell from '@/components/cells/ProductionNameCell.vue'
+import TaskTypeCell from '@/components/cells/TaskTypeCell.vue'
+import EntityThumbnail from '@/components/widgets/EntityThumbnail.vue'
 
 export default {
   name: 'timers',
@@ -140,7 +196,10 @@ export default {
     PageTitle,
     ButtonSimple,
     Spinner,
-    DateField
+    DateField,
+    ProductionNameCell,
+    TaskTypeCell,
+    EntityThumbnail
   },
 
   data() {
@@ -156,7 +215,7 @@ export default {
   },
 
   computed: {
-    ...mapGetters(['displayedTodos']),
+    ...mapGetters(['displayedTodos', 'productionMap', 'taskTypeMap']),
 
     taskOptions() {
       return this.displayedTodos.map(task => ({
@@ -217,6 +276,29 @@ export default {
       loadUserTimeSpents: 'loadUserTimeSpents'
     }),
 
+    entityPath(entity) {
+      const entityType = entity.sequence_name ? 'shot' : 'asset'
+      const route = {
+        name: entityType,
+        params: {
+          production_id: entity.project_id
+        }
+      }
+
+      if (entityType === 'asset') {
+        route.params.asset_id = entity.entity_id
+      } else {
+        route.params.shot_id = entity.entity_id
+      }
+
+      if (entity.episode_id) {
+        route.name = `episode-${entityType}`
+        route.params.episode_id = entity.episode_id
+      }
+
+      return route
+    },
+
     taskName(id) {
       const task = this.displayedTodos.find(t => t.id === id)
       return task ? task.full_entity_name : id
@@ -244,7 +326,7 @@ export default {
     },
 
     taskById(id) {
-      return this.displayedTodos.find(t => t.id === id) || {}
+      return this.displayedTodos.find(t => t.id === id)
     },
 
     fetchTimers() {
@@ -340,10 +422,6 @@ export default {
   align-items: center;
 }
 
-.page-footer {
-  margin-top: 1em;
-}
-
 .logged-time {
   white-space: nowrap;
 }
@@ -365,5 +443,46 @@ export default {
 .icon-button {
   width: 3em;
   height: 3em;
+}
+
+.datatable-body tr:first-child th,
+.datatable-body tr:first-child td {
+  border-top: 0;
+}
+
+.name {
+  width: 230px;
+  min-width: 230px;
+}
+
+.name a {
+  color: inherit;
+}
+
+.production {
+  width: 70px;
+  min-width: 70px;
+  max-width: 70px;
+}
+
+.type {
+  width: 160px;
+  min-width: 160px;
+}
+
+td.name {
+  font-weight: bold;
+}
+
+.thumbnail {
+  min-width: 60px;
+  max-width: 60px;
+  width: 60px;
+  padding: 0;
+}
+
+.time-spent-total {
+  font-size: 1.6em;
+  line-height: 1.7em;
 }
 </style>
