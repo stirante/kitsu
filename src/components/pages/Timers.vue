@@ -18,7 +18,11 @@
             @click="onStartTimer"
           />
           <div class="filler"></div>
-          <date-field :can-delete="false" :label="$t('timers.date')" />
+          <date-field
+            :can-delete="false"
+            :label="$t('timers.date')"
+            v-model="selectedDate"
+          />
         </div>
         <div class="has-text-centered" v-if="isLoading">
           <spinner />
@@ -72,7 +76,9 @@
                   {{ formatDuration(timerDuration(timer)) }}
                 </td>
                 <td>
-                  {{ formatDuration(taskById(timer.task_id).task_duration) }}/{{
+                  {{
+                    formatDuration(taskDurationWithRunning(timer.task_id))
+                  }}/{{
                     formatDuration(taskById(timer.task_id).task_estimation)
                   }}
                 </td>
@@ -117,6 +123,7 @@ import moment from 'moment-timezone'
 import { mapGetters, mapActions } from 'vuex'
 
 import { formatListMixin } from '@/components/mixins/format'
+import { timeMixin } from '@/components/mixins/time'
 import Combobox from '@/components/widgets/Combobox.vue'
 import PageTitle from '@/components/widgets/PageTitle.vue'
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
@@ -126,7 +133,7 @@ import DateField from '@/components/widgets/DateField.vue'
 export default {
   name: 'timers',
 
-  mixins: [formatListMixin],
+  mixins: [formatListMixin, timeMixin],
 
   components: {
     Combobox,
@@ -140,6 +147,8 @@ export default {
     return {
       timers: [],
       selectedTask: '',
+      selectedDate: new Date(),
+      tick: 0,
       timerStart: {},
       timerEnd: {},
       isLoading: false
@@ -147,7 +156,7 @@ export default {
   },
 
   computed: {
-    ...mapGetters(['displayedTodos', 'timeSpentTotal']),
+    ...mapGetters(['displayedTodos']),
 
     taskOptions() {
       return this.displayedTodos.map(task => ({
@@ -156,19 +165,21 @@ export default {
       }))
     },
 
+    selectedDateStr() {
+      return moment(this.selectedDate).format('YYYY-MM-DD')
+    },
+
     currentTimer() {
       return this.timers.find(t => !t.end_time)
     },
 
     totalDuration() {
-      let minutes = this.timeSpentTotal * 60
-      if (this.currentTimer) {
-        minutes += moment().diff(
-          moment.utc(this.currentTimer.start_time),
-          'minutes'
-        )
-      }
-      return minutes
+      // Referencing the tick variable here is a hack to make Vue recompute this
+      this.tick
+      return this.timers.reduce((sum, timer) => {
+        const end = timer.end_time ? moment.utc(timer.end_time) : moment.utc()
+        return sum + end.diff(moment.utc(timer.start_time), 'minutes')
+      }, 0)
     }
   },
 
@@ -177,14 +188,22 @@ export default {
       if (!this.selectedTask && newOptions.length > 0) {
         this.selectedTask = newOptions[0].value
       }
+    },
+
+    selectedDate() {
+      const date = this.selectedDateStr
+      this.loadTodos({ date })
+      this.fetchTimers()
     }
   },
 
   created() {
-    const today = moment().format('YYYY-MM-DD')
-    this.loadTodos({ date: today })
-    this.loadUserTimeSpents({ date: today })
-    this.fetchTimers()
+    this.selectedDate = this.today
+    this.startTick()
+  },
+
+  beforeUnmount() {
+    clearInterval(this.tickInterval)
   },
 
   methods: {
@@ -204,8 +223,24 @@ export default {
     },
 
     timerDuration(timer) {
-      if (!timer.end_time) return moment().diff(timer.start_time, 'minutes')
-      return moment(timer.end_time).diff(timer.start_time, 'minutes')
+      // Referencing the tick variable here is a hack to make Vue recompute this
+      this.tick
+      const end = timer.end_time ? moment.utc(timer.end_time) : moment.utc()
+      return end.diff(moment.utc(timer.start_time), 'minutes')
+    },
+
+    taskDurationWithRunning(taskId) {
+      // Referencing the tick variable here is a hack to make Vue recompute this
+      this.tick
+      const task = this.taskById(taskId)
+      const base = task.task_duration || 0
+      if (this.currentTimer && this.currentTimer.task_id === taskId) {
+        const extra = moment
+          .utc()
+          .diff(moment.utc(this.currentTimer.start_time), 'minutes')
+        return base + extra
+      }
+      return base
     },
 
     taskById(id) {
@@ -214,11 +249,12 @@ export default {
 
     fetchTimers() {
       this.isLoading = true
-      this.loadTimersAction(this.today, true)
+      this.loadTimersAction(this.selectedDateStr, true)
         .then(timers => {
           this.timers = timers
           this.isLoading = false
           this.initLocalTimes()
+          this.loadUserTimeSpents({ date: this.selectedDateStr })
         })
         .catch(err => {
           console.error(err)
@@ -244,13 +280,23 @@ export default {
       })
     },
 
-    onStartTimer() {
+    async onStartTimer() {
       if (!this.selectedTask) return
-      this.startTimerAction(this.selectedTask).then(this.fetchTimers)
+      if (this.currentTimer) {
+        await this.endTimerAction()
+      }
+      await this.startTimerAction(this.selectedTask)
+      this.fetchTimers()
     },
 
     onEndTimer() {
       this.endTimerAction().then(this.fetchTimers)
+    },
+
+    startTick() {
+      this.tickInterval = setInterval(() => {
+        this.tick++
+      }, 60000)
     },
 
     updateStart(timer) {
