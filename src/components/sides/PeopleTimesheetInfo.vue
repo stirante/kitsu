@@ -15,7 +15,20 @@
       {{ year }}
     </div>
 
-    <div class="info-date" v-if="isMonthInfo">{{ monthString }} {{ year }}</div>
+    <div class="flexrow" v-if="isMonthInfo" style="margin-top: 1em">
+      <div class="info-date" style="margin-top: 0">
+        {{ monthString }} {{ year }}
+      </div>
+      <div class="filler"></div>
+      <div class="flexrow-item">
+        <button-href-link
+          v-if="isMonthInfo"
+          :title="$t('timesheets.export_timesheet')"
+          :path="csvExportPath"
+          icon="export"
+        />
+      </div>
+    </div>
 
     <div class="info-date" v-else-if="isWeekInfo">
       {{ $t('main.week') }}
@@ -50,6 +63,7 @@ import { monthToString } from '@/lib/time'
 import PageTitle from '@/components/widgets/PageTitle.vue'
 import PeopleAvatar from '@/components/widgets/PeopleAvatar.vue'
 import TimeSpentTaskList from '@/components/lists/TimeSpentTaskList.vue'
+import ButtonHrefLink from '@/components/widgets/ButtonHrefLink.vue'
 
 export default {
   name: 'people-timesheet-info',
@@ -58,7 +72,8 @@ export default {
     PageTitle,
     PeopleAvatar,
     TimeSpentTaskList,
-    XIcon
+    XIcon,
+    ButtonHrefLink
   },
 
   props: {
@@ -146,6 +161,10 @@ export default {
 
     isDayInfo() {
       return this.$route.path.indexOf('day') > 0
+    },
+
+    csvExportPath() {
+      return `/api/export/csv/persons/${this.person.id}/time-spents/month/${this.year}/${this.month}.csv`
     },
 
     closeRoute() {
