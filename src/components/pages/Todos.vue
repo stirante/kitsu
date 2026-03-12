@@ -154,7 +154,7 @@ import { timeMixin } from '@/components/mixins/time'
 import { searchMixin } from '@/components/mixins/search'
 
 import { sortTaskStatuses } from '@/lib/sorting'
-import { parseDate } from '@/lib/time'
+import { formatSimpleDateUTC, parseDate } from '@/lib/time'
 import { getTrackedMinutesByTaskForDate } from '@/lib/timers'
 
 import Combobox from '@/components/widgets/Combobox.vue'
@@ -518,7 +518,7 @@ export default {
 
     async onDateChanged(date) {
       this.loading.timesheets = true
-      this.selectedDate = moment(date).format('YYYY-MM-DD')
+      this.selectedDate = formatSimpleDateUTC(date)
       await this.loadTimers({ date: this.selectedDate })
       await this.loadTimeSpents()
       this.loading.timesheets = false

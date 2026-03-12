@@ -219,6 +219,7 @@ import moment from 'moment-timezone'
 import { mapGetters } from 'vuex'
 
 import { PAGE_SIZE } from '@/lib/pagination'
+import { formatSimpleDateUTC } from '@/lib/time'
 import { isSameTaskId } from '@/lib/timers'
 
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
@@ -357,7 +358,7 @@ export default {
     ]),
 
     personDayOff() {
-      const selectedDate = moment(this.selectedDate).format('YYYY-MM-DD')
+      const selectedDate = formatSimpleDateUTC(this.selectedDate)
       return this.daysOff.find(
         dayOff =>
           selectedDate >= dayOff.date &&

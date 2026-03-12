@@ -23,6 +23,11 @@ export const formatSimpleDate = date => {
   else return ''
 }
 
+export const formatSimpleDateUTC = date => {
+  if (date) return moment.utc(date).format('YYYY-MM-DD')
+  else return ''
+}
+
 export const formatFullDate = date => {
   if (date) {
     const utcDate = moment.tz(date, 'UTC')

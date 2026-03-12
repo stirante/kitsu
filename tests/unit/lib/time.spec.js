@@ -7,6 +7,7 @@ import {
   formatFullDateWithTimezone,
   formatFullDateWithRevertedTimezone,
   formatSimpleDate,
+  formatSimpleDateUTC,
   hoursToDays,
   getBusinessDays,
   getDayRange,
@@ -52,6 +53,11 @@ describe('time', () => {
   test('formatSimpleDate', () => {
     const dateString = formatSimpleDate(new Date('2019-09-01T08:23:12Z'))
     expect(dateString).toEqual('2019-09-01')
+  })
+
+  test('formatSimpleDateUTC', () => {
+    const dateString = formatSimpleDateUTC(new Date('2019-09-01T23:00:00-10:00'))
+    expect(dateString).toEqual('2019-09-02')
   })
 
   test('formatDate', () => {

@@ -170,6 +170,7 @@ import colors from '@/lib/colors'
 import { sortTaskStatuses } from '@/lib/sorting'
 import {
   addBusinessDays,
+  formatSimpleDateUTC,
   getFirstStartDate,
   getLastEndDate,
   minutesToDays,
@@ -819,7 +820,7 @@ export default {
     },
 
     async onDateChanged(date) {
-      this.selectedDate = moment(date).format('YYYY-MM-DD')
+      this.selectedDate = formatSimpleDateUTC(date)
       await this.loadTimeSpents()
     },
 

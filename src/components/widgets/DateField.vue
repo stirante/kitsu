@@ -92,7 +92,11 @@ export default {
       },
       set(value) {
         if (!this.enableTimePicker && value?.setHours) {
-          value.setHours(0, 0, 0, 0)
+          if (this.utc && value?.setUTCHours) {
+            value.setUTCHours(0, 0, 0, 0)
+          } else {
+            value.setHours(0, 0, 0, 0)
+          }
         }
         this.$emit('update:modelValue', value)
       }
