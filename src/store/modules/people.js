@@ -35,6 +35,7 @@ import {
   SET_TIME_SPENT,
   PEOPLE_TIMESHEET_LOADED,
   PERSON_LOAD_TIME_SPENTS_END,
+  USER_LOAD_TIME_SPENTS_END,
   SET_ORGANISATION,
   SET_PERSON_TASKS_SCROLL_POSITION,
   PEOPLE_SET_DAY_OFFS,
@@ -462,13 +463,32 @@ const actions = {
   },
 
   async setTimeSpent({ commit }, { personId, taskId, date, duration }) {
-    const timeSpent = await peopleApi.setTimeSpent(
-      taskId,
-      personId,
+    const optimisticTimeSpent = {
+      task_id: taskId,
+      person_id: personId,
       date,
-      duration
-    )
-    commit(SET_TIME_SPENT, timeSpent)
+      duration: duration * 60
+    }
+
+    commit(SET_TIME_SPENT, optimisticTimeSpent)
+
+    try {
+      const timeSpent = await peopleApi.setTimeSpent(
+        taskId,
+        personId,
+        date,
+        duration
+      )
+      commit(SET_TIME_SPENT, {
+        ...optimisticTimeSpent,
+        ...timeSpent
+      })
+    } catch (error) {
+      const timeSpents = await peopleApi.getTimeSpents(personId, date)
+      commit(PERSON_LOAD_TIME_SPENTS_END, timeSpents)
+      commit(USER_LOAD_TIME_SPENTS_END, timeSpents)
+      throw error
+    }
   },
 
   setDayOff(_, { id, personId, date, end_date, description }) {
@@ -814,7 +834,11 @@ const mutations = {
 
   [SET_TIME_SPENT](state, timeSpent) {
     if (state.person.id === timeSpent.person_id) {
-      state.personTimeSpentMap[timeSpent.task_id] = timeSpent
+      if (timeSpent.duration > 0) {
+        state.personTimeSpentMap[timeSpent.task_id] = timeSpent
+      } else {
+        delete state.personTimeSpentMap[timeSpent.task_id]
+      }
     }
     state.personTimeSpentTotal =
       Object.values(state.personTimeSpentMap).reduce(

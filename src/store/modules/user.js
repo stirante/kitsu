@@ -727,7 +727,11 @@ const mutations = {
 
   [SET_TIME_SPENT](state, timeSpent) {
     if (state.user.id === timeSpent.person_id) {
-      state.timeSpentMap[timeSpent.task_id] = timeSpent
+      if (timeSpent.duration > 0) {
+        state.timeSpentMap[timeSpent.task_id] = timeSpent
+      } else {
+        delete state.timeSpentMap[timeSpent.task_id]
+      }
     }
     state.timeSpentTotal =
       Object.values(state.timeSpentMap).reduce(

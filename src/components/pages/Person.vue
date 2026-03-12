@@ -113,9 +113,17 @@
             :day-off-error="dayOffError"
             :time-spent-map="personTimeSpentMap"
             :time-spent-total="personTimeSpentTotal"
+            :active-timer-task-id="
+              user.id === person.id ? currentTimer?.task_id || '' : ''
+            "
+            :display-duration-for-task="displayDurationForTask"
+            :manual-duration-for-task="manualDurationForTask"
             :hide-done="false"
             :hide-day-off="!(isCurrentUserAdmin || user.id === person.id)"
+            :show-timer-controls="user.id === person.id"
             @date-changed="onDateChanged"
+            @start-timer="onStartTimer"
+            @stop-timer="onStopTimer"
             @time-spent-change="onTimeSpentChange"
             @set-day-off="onSetDayOff"
             @unset-day-off="onUnsetDayOff"
@@ -167,9 +175,11 @@ import {
   minutesToDays,
   parseDate
 } from '@/lib/time'
+import { getTrackedMinutesByTaskForDate } from '@/lib/timers'
 
 import { formatListMixin } from '@/components/mixins/format'
 import { searchMixin } from '@/components/mixins/search'
+import { timeMixin } from '@/components/mixins/time'
 
 import Combobox from '@/components/widgets/Combobox.vue'
 import ComboboxNumber from '@/components/widgets/ComboboxNumber.vue'
@@ -189,7 +199,7 @@ import UserCalendar from '@/components/widgets/UserCalendar.vue'
 export default {
   name: 'person',
 
-  mixins: [formatListMixin, searchMixin],
+  mixins: [formatListMixin, searchMixin, timeMixin],
 
   components: {
     Combobox,
@@ -280,6 +290,8 @@ export default {
       'personTaskSelectionGrid',
       'personTimeSpentMap',
       'personTimeSpentTotal',
+      'timers',
+      'currentTimer',
       'openProductions',
       'productionMap',
       'selectedTasks',
@@ -323,6 +335,18 @@ export default {
 
     haveDoneList() {
       return this.$refs['done-list']
+    },
+
+    trackedMinutesByTask() {
+      if (this.user.id !== this.person.id) {
+        return {}
+      }
+
+      return getTrackedMinutesByTaskForDate({
+        timers: this.timers,
+        date: this.selectedDate,
+        timezone: this.timezone
+      })
     },
 
     sortedTasks() {
@@ -504,11 +528,14 @@ export default {
       'loadPersonDoneTasks',
       'loadPersonTasks',
       'loadPersonTimeSpents',
+      'loadTimers',
       'setPersonTasksSearch',
       'savePersonTasksSearch',
       'removePersonTasksSearch',
+      'startTimer',
       'setDayOff',
       'setPersonTasksScrollPosition',
+      'endTimer',
       'setTimeSpent',
       'unsetDayOff',
       'updateTask'
@@ -666,6 +693,9 @@ export default {
           personId: this.person.id,
           date: this.selectedDate
         })
+        if (this.user.id === this.person.id) {
+          await this.loadTimers({ date: this.selectedDate })
+        }
         setTimeout(() => {
           this.$nextTick(() => {
             this.taskList?.setScrollPosition(this.personTasksScrollPosition)
@@ -700,6 +730,9 @@ export default {
 
     async loadTimeSpents() {
       this.isTasksLoading = true
+      if (this.user.id === this.person.id) {
+        await this.loadTimers({ date: this.selectedDate })
+      }
       await this.loadPersonTimeSpents({
         personId: this.person.id,
         date: this.selectedDate
@@ -769,8 +802,42 @@ export default {
       this.setTimeSpent(timeSpentInfo)
     },
 
+    manualDurationForTask(taskId) {
+      return (this.personTimeSpentMap[taskId]?.duration || 0) / 60
+    },
+
+    displayDurationForTask(taskId) {
+      if (this.user.id !== this.person.id) {
+        return this.personTimeSpentMap[taskId]
+          ? this.personTimeSpentMap[taskId].duration / 60
+          : 0
+      }
+
+      const manualDuration = this.personTimeSpentMap[taskId]?.duration || 0
+      const timerDuration = this.trackedMinutesByTask[String(taskId)] || 0
+      return (manualDuration + timerDuration) / 60
+    },
+
     async onDateChanged(date) {
       this.selectedDate = moment(date).format('YYYY-MM-DD')
+      await this.loadTimeSpents()
+    },
+
+    async onStartTimer(task) {
+      if (this.user.id !== this.person.id) {
+        return
+      }
+
+      await this.startTimer(task.id)
+      await this.loadTimeSpents()
+    },
+
+    async onStopTimer() {
+      if (this.user.id !== this.person.id) {
+        return
+      }
+
+      await this.endTimer()
       await this.loadTimeSpents()
     },
 

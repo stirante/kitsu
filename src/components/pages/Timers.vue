@@ -36,7 +36,7 @@
           <spinner />
         </div>
         <div v-else>
-          <table class="datatable" v-if="timers.length">
+          <table class="datatable" v-if="displayedTimers.length">
             <thead class="datatable-head">
               <tr class="datatable-row-header">
                 <th
@@ -64,39 +64,41 @@
               </tr>
             </thead>
             <tbody class="datatable-body">
-              <tr class="datatable-row" v-for="timer in timers" :key="timer.id">
-                <template v-if="taskById(timer.task_id)">
+              <tr
+                class="datatable-row"
+                v-for="timer in displayedTimers"
+                :key="timer.id"
+              >
+                <template v-if="taskForTimer(timer)">
                   <th
                     class="production datatable-row-header datatable-row-header--nobd"
                     scope="row"
                   >
                     <production-name-cell
-                      :entry="
-                        productionMap.get(taskById(timer.task_id).project_id)
-                      "
+                      :entry="productionMap.get(taskForTimer(timer).project_id)"
                       :only-avatar="true"
                     />
                   </th>
                   <task-type-cell
                     class="type datatable-row-header datatable-row-header--nobd"
-                    :production-id="taskById(timer.task_id).project_id"
+                    :production-id="taskForTimer(timer).project_id"
                     :task-type="
-                      taskTypeMap.get(taskById(timer.task_id).task_type_id)
+                      taskTypeMap.get(taskForTimer(timer).task_type_id)
                     "
                   />
                   <th class="name datatable-row-header">
-                    <router-link :to="entityPath(taskById(timer.task_id))">
+                    <router-link :to="entityPath(taskForTimer(timer))">
                       <div class="flexrow">
                         <entity-thumbnail
                           :empty-width="60"
                           :empty-height="40"
                           :entity="{
-                            preview_file_id: taskById(timer.task_id)
-                              .entity_preview_file_id
+                            preview_file_id:
+                              taskForTimer(timer).entity_preview_file_id
                           }"
                         />
                         <span>
-                          {{ taskById(timer.task_id).full_entity_name }}
+                          {{ taskForTimer(timer).full_entity_name }}
                         </span>
                       </div>
                     </router-link>
@@ -136,15 +138,11 @@
                   <td>
                     {{
                       formatDuration(taskDurationWithRunning(timer.task_id))
-                    }}/{{
-                      formatDuration(taskById(timer.task_id).task_estimation)
-                    }}
+                    }}/{{ formatDuration(taskForTimer(timer).task_estimation) }}
                     {{ $t('timesheets.hours') }}
                   </td>
                   <td class="end-cell" style="text-align: right">
-                    <template
-                      v-if="currentTimer && currentTimer.id === timer.id"
-                    >
+                    <template v-if="canStopTimer(timer)">
                       <button-simple
                         class="icon-button"
                         :title="$t('timers.stop')"
@@ -152,7 +150,7 @@
                         @click="onEndTimer"
                       />
                     </template>
-                    <template v-else>
+                    <template v-else-if="canDeleteTimer(timer)">
                       <button-simple
                         class="icon-button discard-button"
                         icon="trash"
@@ -174,6 +172,11 @@
 <script>
 import moment from 'moment-timezone'
 import { mapGetters, mapActions } from 'vuex'
+import {
+  getTimerDateOverlapMinutes,
+  getTrackedMinutesByTaskForDate,
+  isSameTaskId
+} from '@/lib/timers'
 
 import { formatListMixin } from '@/components/mixins/format'
 import { timeMixin } from '@/components/mixins/time'
@@ -204,7 +207,6 @@ export default {
 
   data() {
     return {
-      timers: [],
       selectedTask: '',
       selectedDate: new Date(),
       tick: 0,
@@ -215,7 +217,16 @@ export default {
   },
 
   computed: {
-    ...mapGetters(['displayedTodos', 'productionMap', 'taskTypeMap']),
+    ...mapGetters([
+      'isCurrentUserAdmin',
+      'currentTimer',
+      'displayedTodos',
+      'productionMap',
+      'taskTypeMap',
+      'timeSpentMap',
+      'timers',
+      'timersForDate'
+    ]),
 
     taskOptions() {
       return this.displayedTodos.map(task => ({
@@ -228,17 +239,40 @@ export default {
       return moment(this.selectedDate).format('YYYY-MM-DD')
     },
 
-    currentTimer() {
-      return this.timers.find(t => !t.end_time)
+    displayedTimers() {
+      return this.timersForDate({
+        date: this.selectedDateStr,
+        timezone: this.timezone,
+        now: moment.utc()
+      })
     },
 
     totalDuration() {
       // Referencing the tick variable here is a hack to make Vue recompute this
       this.tick
-      return this.timers.reduce((sum, timer) => {
-        const end = timer.end_time ? moment.utc(timer.end_time) : moment.utc()
-        return sum + end.diff(moment.utc(timer.start_time), 'minutes')
-      }, 0)
+      const now = moment.utc()
+      return this.displayedTimers.reduce(
+        (sum, timer) =>
+          sum +
+          getTimerDateOverlapMinutes(
+            timer,
+            this.selectedDateStr,
+            this.timezone,
+            now
+          ),
+        0
+      )
+    },
+
+    trackedMinutesByTask() {
+      // Referencing the tick variable here is a hack to make Vue recompute this
+      this.tick
+      return getTrackedMinutesByTaskForDate({
+        timers: this.timers,
+        date: this.selectedDateStr,
+        timezone: this.timezone,
+        now: moment.utc()
+      })
     }
   },
 
@@ -307,40 +341,52 @@ export default {
     timerDuration(timer) {
       // Referencing the tick variable here is a hack to make Vue recompute this
       this.tick
-      const end = timer.end_time ? moment.utc(timer.end_time) : moment.utc()
-      return end.diff(moment.utc(timer.start_time), 'minutes')
+      return getTimerDateOverlapMinutes(
+        timer,
+        this.selectedDateStr,
+        this.timezone,
+        moment.utc()
+      )
     },
 
     taskDurationWithRunning(taskId) {
-      // Referencing the tick variable here is a hack to make Vue recompute this
-      this.tick
-      const task = this.taskById(taskId)
-      const base = task.task_duration || 0
-      if (this.currentTimer && this.currentTimer.task_id === taskId) {
-        const extra = moment
-          .utc()
-          .diff(moment.utc(this.currentTimer.start_time), 'minutes')
-        return base + extra
-      }
-      return base
+      const manualDuration = this.timeSpentMap[taskId]?.duration || 0
+      const timerDuration = this.trackedMinutesByTask[String(taskId)] || 0
+      return manualDuration + timerDuration
     },
 
     taskById(id) {
-      return this.displayedTodos.find(t => t.id === id)
+      return this.displayedTodos.find(t => isSameTaskId(t.id, id))
+    },
+
+    taskForTimer(timer) {
+      return timer.task || this.taskById(timer.task_id)
+    },
+
+    isOwnTimer(timer) {
+      return (
+        !timer.person_id || String(timer.person_id) === String(this.user.id)
+      )
+    },
+
+    canStopTimer(timer) {
+      return !timer.end_time && this.isOwnTimer(timer)
+    },
+
+    canDeleteTimer(timer) {
+      return this.isOwnTimer(timer) || this.isCurrentUserAdmin
     },
 
     fetchTimers() {
       this.isLoading = true
-      this.loadTimersAction(this.selectedDateStr, true)
-        .then(timers => {
-          this.timers = timers
+      this.loadTimersAction({ date: this.selectedDateStr, embedTask: true })
+        .then(() => {
           this.isLoading = false
           this.initLocalTimes()
-          this.loadUserTimeSpents({ date: this.selectedDateStr })
+          return this.loadUserTimeSpents({ date: this.selectedDateStr })
         })
         .catch(err => {
           console.error(err)
-          this.timers = []
           this.isLoading = false
         })
     },
@@ -364,14 +410,15 @@ export default {
 
     async onStartTimer() {
       if (!this.selectedTask) return
-      if (this.currentTimer) {
-        await this.endTimerAction()
-      }
       await this.startTimerAction(this.selectedTask)
       this.fetchTimers()
     },
 
     onEndTimer() {
+      if (!this.currentTimer || !this.isOwnTimer(this.currentTimer)) {
+        return
+      }
+
       this.endTimerAction().then(this.fetchTimers)
     },
 
@@ -382,6 +429,11 @@ export default {
     },
 
     updateStart(timer) {
+      if (!this.isOwnTimer(timer)) {
+        this.initLocalTimes()
+        return
+      }
+
       const start_time = moment(this.timerStart[timer.id])
         .utc()
         .format('YYYY-MM-DDTHH:mm:00')
@@ -391,6 +443,11 @@ export default {
     },
 
     updateEnd(timer) {
+      if (!this.isOwnTimer(timer)) {
+        this.initLocalTimes()
+        return
+      }
+
       const end_time = moment(this.timerEnd[timer.id])
         .utc()
         .format('YYYY-MM-DDTHH:mm:00')
@@ -400,6 +457,10 @@ export default {
     },
 
     onDelete(timer) {
+      if (!this.canDeleteTimer(timer)) {
+        return
+      }
+
       this.deleteTimerAction(timer.id).then(this.fetchTimers)
     }
   },

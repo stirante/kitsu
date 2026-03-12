@@ -13,7 +13,7 @@
       </div>
       <div class="flexrow-item flexrow time-spent-total">
         -&nbsp;&nbsp;
-        {{ timeSpentTotal }} {{ $t('timesheets.hours') }}
+        {{ formattedTimeSpentTotal }} {{ $t('timesheets.hours') }}
       </div>
       <div class="filler"></div>
       <button-simple
@@ -103,11 +103,14 @@
             </th>
             <time-slider-cell
               class="time-spent"
-              :duration="
-                timeSpentMap[task.id] ? timeSpentMap[task.id].duration / 60 : 0
-              "
+              :duration="manualDuration(task.id)"
+              :display-duration="displayDuration(task.id)"
+              :is-timer-running="isTimerRunning(task.id)"
+              :show-timer-controls="showTimerControls"
               :task-id="task.id"
               @change="onSliderChange"
+              @start-timer="$emit('start-timer', task)"
+              @stop-timer="$emit('stop-timer', task)"
               v-if="!personIsDayOff"
             />
             <td v-else></td>
@@ -159,11 +162,14 @@
             </th>
             <time-slider-cell
               class="time-spent"
-              :duration="
-                timeSpentMap[task.id] ? timeSpentMap[task.id].duration / 60 : 0
-              "
+              :duration="manualDuration(task.id)"
+              :display-duration="displayDuration(task.id)"
+              :is-timer-running="isTimerRunning(task.id)"
+              :show-timer-controls="showTimerControls"
               :task-id="task.id"
               @change="onSliderChange"
+              @start-timer="$emit('start-timer', task)"
+              @stop-timer="$emit('stop-timer', task)"
               v-if="!personIsDayOff"
             />
           </tr>
@@ -213,6 +219,7 @@ import moment from 'moment-timezone'
 import { mapGetters } from 'vuex'
 
 import { PAGE_SIZE } from '@/lib/pagination'
+import { isSameTaskId } from '@/lib/timers'
 
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
 import DateField from '@/components/widgets/DateField.vue'
@@ -283,10 +290,33 @@ export default {
     hideDayOff: {
       default: true,
       type: Boolean
+    },
+    activeTimerTaskId: {
+      default: '',
+      type: String
+    },
+    displayDurationForTask: {
+      default: null,
+      type: Function
+    },
+    manualDurationForTask: {
+      default: null,
+      type: Function
+    },
+    showTimerControls: {
+      default: false,
+      type: Boolean
     }
   },
 
-  emits: ['date-changed', 'set-day-off', 'time-spent-change', 'unset-day-off'],
+  emits: [
+    'date-changed',
+    'set-day-off',
+    'start-timer',
+    'stop-timer',
+    'time-spent-change',
+    'unset-day-off'
+  ],
 
   data() {
     const today = new Date()
@@ -356,6 +386,32 @@ export default {
 
     dayOffTextError() {
       return this.dayOffError?.length ? this.dayOffError : null
+    },
+
+    formattedTimeSpentTotal() {
+      const rounded =
+        Math.round((this.displayedTimeSpentTotal + Number.EPSILON) * 100) / 100
+      if (Number.isInteger(rounded)) {
+        return `${rounded}`
+      }
+
+      return rounded.toFixed(2).replace(/\.?0+$/, '')
+    },
+
+    displayedTimeSpentTotal() {
+      if (!this.displayDurationForTask) {
+        return this.timeSpentTotal
+      }
+
+      const taskIds = new Set([
+        ...this.tasks.map(task => task.id),
+        ...this.doneTasks.map(task => task.id)
+      ])
+
+      return [...taskIds].reduce(
+        (sum, taskId) => sum + this.displayDuration(taskId),
+        0
+      )
     }
   },
 
@@ -376,6 +432,32 @@ export default {
 
     onSliderChange(valueInfo) {
       this.$emit('time-spent-change', valueInfo)
+    },
+
+    manualDuration(taskId) {
+      if (this.manualDurationForTask) {
+        return this.manualDurationForTask(taskId)
+      }
+
+      return this.timeSpentMap[taskId]
+        ? this.timeSpentMap[taskId].duration / 60
+        : 0
+    },
+
+    displayDuration(taskId) {
+      if (!this.displayDurationForTask) {
+        return this.manualDuration(taskId)
+      }
+
+      return this.displayDurationForTask(taskId)
+    },
+
+    isTimerRunning(taskId) {
+      if (!this.activeTimerTaskId) {
+        return false
+      }
+
+      return isSameTaskId(this.activeTimerTaskId, taskId)
     },
 
     entityPath(entity) {

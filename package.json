@@ -96,6 +96,6 @@
     "npm": ">=10"
   },
   "lint-staged": {
-    "*.{js,vue}": "eslint --cache"
+    "*.{js,vue}": "eslint --cache --fix"
   }
 }

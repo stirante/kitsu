@@ -113,9 +113,15 @@
           :day-off-error="dayOffError"
           :time-spent-map="timeSpentMap"
           :time-spent-total="timeSpentTotal"
+          :active-timer-task-id="currentTimer?.task_id || ''"
+          :display-duration-for-task="displayDurationForTask"
+          :manual-duration-for-task="manualDurationForTask"
           :hide-done="loggableDoneTasks.length === 0"
           :hide-day-off="false"
+          :show-timer-controls="true"
           @date-changed="onDateChanged"
+          @start-timer="onStartTimer"
+          @stop-timer="onStopTimer"
           @time-spent-change="onTimeSpentChange"
           @set-day-off="onSetDayOff"
           @unset-day-off="onUnsetDayOff"
@@ -144,10 +150,12 @@ import { mapGetters, mapActions } from 'vuex'
 import moment from 'moment-timezone'
 import { firstBy } from 'thenby'
 
+import { timeMixin } from '@/components/mixins/time'
 import { searchMixin } from '@/components/mixins/search'
 
 import { sortTaskStatuses } from '@/lib/sorting'
 import { parseDate } from '@/lib/time'
+import { getTrackedMinutesByTaskForDate } from '@/lib/timers'
 
 import Combobox from '@/components/widgets/Combobox.vue'
 import ComboboxProduction from '@/components/widgets/ComboboxProduction.vue'
@@ -164,7 +172,7 @@ import UserCalendar from '@/components/widgets/UserCalendar.vue'
 export default {
   name: 'todos',
 
-  mixins: [searchMixin],
+  mixins: [searchMixin, timeMixin],
 
   components: {
     Combobox,
@@ -240,6 +248,8 @@ export default {
       'selectedTasks',
       'taskStatuses',
       'taskTypeMap',
+      'timers',
+      'currentTimer',
       'timeSpentMap',
       'timeSpentTotal',
       'todoListScrollPosition',
@@ -354,6 +364,14 @@ export default {
       })
     },
 
+    trackedMinutesByTask() {
+      return getTrackedMinutesByTaskForDate({
+        timers: this.timers,
+        date: this.selectedDate,
+        timezone: this.timezone
+      })
+    },
+
     todoList() {
       return this.$refs['todo-list']
     },
@@ -388,12 +406,15 @@ export default {
       'clearSelectedTasks',
       'loadAggregatedPersonDaysOff',
       'loadOpenProductions',
+      'loadTimers',
       'loadUserTimeSpents',
       'loadTodos',
       'loadDoneTasks',
       'removeTodoSearch',
       'saveTodoSearch',
+      'startTimer',
       'setDayOff',
+      'endTimer',
       'setTimeSpent',
       'setTodoListScrollPosition',
       'setTodosSearch',
@@ -410,6 +431,7 @@ export default {
         date: this.selectedDate,
         forced
       })
+      await this.loadTimers({ date: this.selectedDate })
       this.loadDoneTasks().then(() => {
         this.loading.doneTasks = false
       })
@@ -497,6 +519,7 @@ export default {
     async onDateChanged(date) {
       this.loading.timesheets = true
       this.selectedDate = moment(date).format('YYYY-MM-DD')
+      await this.loadTimers({ date: this.selectedDate })
       await this.loadTimeSpents()
       this.loading.timesheets = false
     },
@@ -532,6 +555,26 @@ export default {
       timeSpentInfo.personId = this.user.id
       timeSpentInfo.date = this.selectedDate
       this.setTimeSpent(timeSpentInfo)
+    },
+
+    manualDurationForTask(taskId) {
+      return (this.timeSpentMap[taskId]?.duration || 0) / 60
+    },
+
+    displayDurationForTask(taskId) {
+      const manualDuration = this.timeSpentMap[taskId]?.duration || 0
+      const timerDuration = this.trackedMinutesByTask[String(taskId)] || 0
+      return (manualDuration + timerDuration) / 60
+    },
+
+    async onStartTimer(task) {
+      await this.startTimer(task.id)
+      await this.loadTimeSpents()
+    },
+
+    async onStopTimer() {
+      await this.endTimer()
+      await this.loadTimeSpents()
     },
 
     async onAssignation(eventData) {
