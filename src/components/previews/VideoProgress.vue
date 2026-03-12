@@ -126,14 +126,6 @@ export default {
       default: false,
       type: Boolean
     },
-    entityList: {
-      default: () => [],
-      type: Array
-    },
-    fps: {
-      default: 0,
-      type: Number
-    },
     frameDuration: {
       default: 0,
       type: Number
@@ -179,10 +171,11 @@ export default {
   data() {
     return {
       currentMouseFrame: {},
-      frameNumberHeight: 0,
       frameNumberLeftPosition: 0,
       isFrameNumberVisible: false,
       isTileLoading: false,
+      handleInDragging: false,
+      handleOutDragging: false,
       hoverFrame: 0,
       progressDragging: false,
       width: 0,
@@ -243,7 +236,7 @@ export default {
         Math.max(this.frameNumberLeftPosition - frameWidth / 2, 0),
         this.width - frameWidth - 10
       )
-      const top = this.isFullScreen ? `-${height + 30}px` : '0px'
+      const top = `-${height + 30}px`
 
       return {
         height: `${height}px`,
@@ -255,10 +248,6 @@ export default {
 
     progress() {
       return this.$refs.progress
-    },
-
-    tilePath() {
-      return `/api/movies/tiles/preview-files/${this.previewId}.png`
     },
 
     videoDuration() {
@@ -432,7 +421,7 @@ export default {
         Math.max(this.frameNumberLeftPosition - frameWidth / 2, 0),
         this.width - frameWidth - 10
       )
-      const top = this.isFullScreen ? `-${height}px` : '30px'
+      const top = `-${height}px`
 
       return {
         height: `${height}px`,

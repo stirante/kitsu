@@ -1,4 +1,3 @@
-import async from 'async'
 import { v4 as uuidv4 } from 'uuid'
 
 import conceptsApi from '@/store/api/concepts'
@@ -40,7 +39,6 @@ const initialState = {
   conceptMap: new Map(),
   conceptSearchText: '',
   conceptSearchQueries: [],
-  displayedConcepts: [],
   linkedConcepts: [],
   selectedConcepts: new Map()
 }
@@ -52,7 +50,6 @@ const state = {
 const getters = {
   concepts: state => state.concepts,
   conceptMap: state => state.conceptMap,
-  displayedConcepts: state => state.displayedConcepts,
   linkedConcepts: state => state.linkedConcepts,
   selectedConcepts: state => state.selectedConcepts
 }
@@ -135,31 +132,19 @@ const actions = {
     commit(ADD_SELECTED_CONCEPTS, concept)
   },
 
-  deleteSelectedConcepts({ state, dispatch }) {
-    return new Promise((resolve, reject) => {
-      let selectedConceptIds = [...state.selectedConcepts.values()]
-        .filter(concept => !concept.canceled)
-        .map(concept => concept.id)
-      if (selectedConceptIds.length === 0) {
-        selectedConceptIds = [...state.selectedConcepts.keys()]
+  async deleteSelectedConcepts({ state, dispatch }) {
+    let selectedConceptIds = [...state.selectedConcepts.values()]
+      .filter(concept => !concept.canceled)
+      .map(concept => concept.id)
+    if (selectedConceptIds.length === 0) {
+      selectedConceptIds = [...state.selectedConcepts.keys()]
+    }
+    for (const conceptId of selectedConceptIds) {
+      const concept = state.conceptMap.get(conceptId)
+      if (concept) {
+        await dispatch('deleteConcept', concept)
       }
-      async.eachSeries(
-        selectedConceptIds,
-        (conceptId, next) => {
-          const concept = state.conceptMap.get(conceptId)
-          if (concept) {
-            dispatch('deleteConcept', concept)
-          }
-          next()
-        },
-        err => {
-          if (err) reject(err)
-          else {
-            resolve()
-          }
-        }
-      )
-    })
+    }
   },
 
   clearSelectedConcepts({ commit }) {
@@ -182,20 +167,17 @@ const mutations = {
   [LOAD_CONCEPTS_START](state) {
     state.concepts = []
     state.conceptMap = new Map()
-    state.displayedConcepts = []
   },
 
   [LOAD_CONCEPTS_ERROR](state) {
     state.concepts = []
     state.conceptMap = new Map()
-    state.displayedConcepts = []
   },
 
   [LOAD_CONCEPTS_END](state, { concepts }) {
     concepts.forEach(helpers.populateConcept)
     state.concepts = concepts
     state.conceptMap = new Map(concepts.map(concept => [concept.id, concept]))
-    state.displayedConcepts = concepts
   },
 
   [EDIT_CONCEPT_END](state, newConcept) {
@@ -215,7 +197,7 @@ const mutations = {
     if (conceptIndex >= 0) {
       state.concepts.splice(conceptIndex, 1)
     }
-    delete state.conceptMap.get(concept.id)
+    state.conceptMap.delete(concept.id)
   },
 
   [ADD_SELECTED_CONCEPTS](state, concepts) {

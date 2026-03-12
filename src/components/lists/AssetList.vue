@@ -50,7 +50,7 @@
               scope="col"
               class="episode"
               ref="th-episode"
-              v-if="isTVShow && isShowInfos"
+              v-if="isTVShow && displaySettings.showInfos"
             >
               {{ $t('assets.fields.episode') }}
             </th>
@@ -102,7 +102,7 @@
               :title="$t('assets.fields.ready_for')"
               v-if="
                 isCurrentUserManager &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 !isAssetsOnly &&
                 metadataDisplayHeaders.readyFor
               "
@@ -114,7 +114,11 @@
               scope="col"
               class="description"
               ref="th-description"
-              v-if="!isCurrentUserClient && isShowInfos && isAssetDescription"
+              v-if="
+                !isCurrentUserClient &&
+                displaySettings.showInfos &&
+                isAssetDescription
+              "
             >
               {{ $t('assets.fields.description') }}
             </th>
@@ -125,7 +129,7 @@
               ref="th-spent"
               v-if="
                 !isCurrentUserClient &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isAssetTime &&
                 metadataDisplayHeaders.timeSpent
               "
@@ -140,7 +144,7 @@
               ref="th-spent"
               v-if="
                 !isCurrentUserClient &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isAssetEstimation &&
                 metadataDisplayHeaders.estimation
               "
@@ -153,14 +157,14 @@
               class="resolution"
               v-if="
                 isAssetResolution &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 metadataDisplayHeaders.resolution
               "
             >
               {{ $t('shots.fields.resolution') }}
             </th>
 
-            <template v-if="isShowInfos">
+            <template v-if="displaySettings.showInfos">
               <metadata-header
                 :key="'header' + descriptor.id"
                 :descriptor="descriptor"
@@ -176,7 +180,6 @@
                 :key="'header' + columnId"
                 :hidden-columns="hiddenColumns"
                 :column-id="columnId"
-                :title="taskTypeMap.get(columnId).name"
                 :validation-style="getValidationStyle(columnId)"
                 type="assets"
                 @show-header-menu="
@@ -215,14 +218,14 @@
                 namespace="assets"
                 v-model="metadataDisplayHeaders"
                 v-show="columnSelectorDisplayed"
-                v-if="isShowInfos"
+                v-if="displaySettings.showInfos"
               />
 
               <button-simple
                 class="is-small is-pulled-right mr05"
                 icon="down"
                 @click="toggleColumnSelector"
-                v-if="isShowInfos"
+                v-if="displaySettings.showInfos"
               />
             </th>
           </tr>
@@ -237,7 +240,7 @@
             v-for="(group, k) in displayedAssets"
           >
             <tr class="datatable-type-header" v-if="group[0]">
-              <th scope="rowgroup" :colspan="visibleColumns">
+              <th scope="rowgroup">
                 <span
                   class="datatable-row-header pointer"
                   @click="$emit('asset-type-clicked', group[0].asset_type_name)"
@@ -277,17 +280,17 @@
                   <entity-thumbnail
                     class="entity-thumbnail flexrow-item"
                     :entity="asset"
-                    :width="isBigThumbnails ? 150 : 50"
-                    :height="isBigThumbnails ? 100 : 30"
-                    :empty-width="isBigThumbnails ? 150 : 50"
-                    :empty-height="isBigThumbnails ? 100 : 32"
+                    :width="displaySettings.bigThumbnails ? 150 : 50"
+                    :height="displaySettings.bigThumbnails ? 100 : 30"
+                    :empty-width="displaySettings.bigThumbnails ? 150 : 50"
+                    :empty-height="displaySettings.bigThumbnails ? 100 : 32"
                   />
                   <router-link
                     tabindex="-1"
                     class="asset-link asset-name flexrow-item"
                     :to="assetPath(asset.id)"
                     :title="asset.full_name"
-                    v-if="!asset.shared"
+                    v-if="!asset.shared && !isCurrentUserClient"
                   >
                     {{ asset.name }}
                   </router-link>
@@ -297,7 +300,7 @@
                 </div>
               </th>
 
-              <td class="episode" v-if="isTVShow && isShowInfos">
+              <td class="episode" v-if="isTVShow && displaySettings.showInfos">
                 <div class="flexrow" :title="assetEpisodes(asset, true)">
                   {{ assetEpisodes(asset, false) }}
                 </div>
@@ -332,7 +335,7 @@
                     'hidden-validation-cell': hiddenColumns[columnId],
                     'datatable-row-header': true
                   }"
-                  :contact-sheet="contactSheetMode"
+                  :contact-sheet="displaySettings.contactSheetMode"
                   :key="'sticky-validation-' + columnId + '-' + asset.id"
                   :canceled="asset.canceled"
                   :column="taskTypeMap.get(columnId)"
@@ -343,7 +346,7 @@
                   :column-y="j"
                   :minimized="hiddenColumns[columnId]"
                   :is-static="true"
-                  :is-assignees="isShowAssignations"
+                  :is-assignees="displaySettings.showAssignations"
                   :left="
                     offsets['validation-' + j]
                       ? `${offsets['validation-' + j]}px`
@@ -360,7 +363,7 @@
                 class="task-type-name ready-for"
                 v-if="
                   isCurrentUserManager &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   !isAssetsOnly &&
                   metadataDisplayHeaders.readyFor
                 "
@@ -382,7 +385,11 @@
                   value => onDescriptionChanged(asset, value)
                 "
                 :editable="isCurrentUserManager && !asset.shared"
-                v-if="!isCurrentUserClient && isShowInfos && isAssetDescription"
+                v-if="
+                  !isCurrentUserClient &&
+                  displaySettings.showInfos &&
+                  isAssetDescription
+                "
                 :entry="asset"
               />
 
@@ -390,7 +397,7 @@
                 class="time-spent selectable number-cell"
                 v-if="
                   !isCurrentUserClient &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   isAssetTime &&
                   metadataDisplayHeaders.timeSpent
                 "
@@ -402,7 +409,7 @@
                 class="estimation selectable number-cell"
                 v-if="
                   !isCurrentUserClient &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   isAssetEstimation &&
                   metadataDisplayHeaders.estimation
                 "
@@ -414,7 +421,7 @@
                 class="resolution"
                 v-if="
                   isAssetResolution &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   metadataDisplayHeaders.resolution
                 "
               >
@@ -449,7 +456,7 @@
               </td>
 
               <!-- other Metadata cells -->
-              <template v-if="isShowInfos">
+              <template v-if="displaySettings.showInfos">
                 <td
                   class="metadata-descriptor"
                   :title="asset.data ? asset.data[descriptor.field_name] : ''"
@@ -479,7 +486,7 @@
                   :key="'validation' + columnId + '-' + asset.id"
                   :canceled="asset.canceled"
                   :column="taskTypeMap.get(columnId)"
-                  :contact-sheet="contactSheetMode"
+                  :contact-sheet="displaySettings.contactSheetMode"
                   :entity="asset"
                   :task-test="taskMap.get(asset.validations.get(columnId))"
                   :selected="
@@ -493,7 +500,7 @@
                   :column-y="j"
                   :minimized="hiddenColumns[columnId]"
                   :is-static="true"
-                  :is-assignees="isShowAssignations"
+                  :is-assignees="displaySettings.showAssignations"
                   :selectable="isSelectable(asset, columnId)"
                   :disabled="!isSelectable(asset, columnId)"
                   @select="onTaskSelected"
@@ -543,26 +550,10 @@
       <table-info :is-loading="isLoading" :is-error="isError" />
     </div>
 
-    <p class="has-text-centered nb-assets" v-if="!isEmptyList && !isLoading">
-      {{ displayedAssetsLength }}
-      {{ $tc('assets.number', displayedAssetsLength) }}
-      <span
-        v-show="displayedAssetsTimeSpent > 0 || displayedAssetsEstimation > 0"
-      >
-        ({{ formatDuration(displayedAssetsTimeSpent) }}
-        {{
-          isDurationInHours
-            ? $tc('main.hours_spent', displayedAssetsTimeSpent)
-            : $tc('main.days_spent', displayedAssetsTimeSpent)
-        }},
-        {{ formatDuration(displayedAssetsEstimation) }}
-        {{
-          isDurationInHours
-            ? $tc('main.hours_estimated', displayedAssetsEstimation)
-            : $tc('main.man_days', displayedAssetsEstimation)
-        }})
-      </span>
-    </p>
+    <asset-list-numbers
+      :assets="displayedAssets"
+      v-if="!isEmptyList && !isLoading"
+    />
   </div>
 </template>
 
@@ -579,6 +570,7 @@ import preferences from '@/lib/preferences'
 import { sortTaskTypes } from '@/lib/sorting'
 import { range } from '@/lib/time'
 
+import AssetListNumbers from '@/components/widgets/AssetListNumbers.vue'
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
 import ComboboxTaskType from '@/components/widgets/ComboboxTaskType.vue'
 import DescriptionCell from '@/components/cells/DescriptionCell.vue'
@@ -609,6 +601,7 @@ export default {
   ],
 
   components: {
+    AssetListNumbers,
     ButtonSimple,
     ComboboxTaskType,
     DescriptionCell,
@@ -628,6 +621,10 @@ export default {
     contactSheetMode: {
       type: Boolean,
       default: false
+    },
+    displaySettings: {
+      type: Object,
+      default: () => {}
     },
     displayedAssets: {
       type: Array,
@@ -694,17 +691,6 @@ export default {
     }
   },
 
-  mounted() {
-    this.stickedColumns =
-      JSON.parse(localStorage.getItem(this.localStorageStickKey)) || {}
-    this.addEvents(this.domEvents)
-  },
-
-  beforeUnmount() {
-    this.removeEvents(this.domEvents)
-    document.body.style.cursor = 'default'
-  },
-
   computed: {
     ...mapGetters([
       'assets',
@@ -716,19 +702,14 @@ export default {
       'currentEpisode',
       'currentProduction',
       'displayedAssetsCount',
-      'displayedAssetsLength',
-      'displayedAssetsTimeSpent',
-      'displayedAssetsEstimation',
       'nbSelectedTasks',
       'organisation',
       'isAssetDescription',
       'isAssetResolution',
-      'isBigThumbnails',
       'isCurrentUserClient',
       'isCurrentUserManager',
       'isCurrentUserSupervisor',
       'isShowAssignations',
-      'isShowInfos',
       'isAssetEstimation',
       'isAssetTime',
       'isTVShow',
@@ -774,37 +755,11 @@ export default {
       return !this.isLoading && !this.isError && this.displayedAssetsCount > 0
     },
 
-    visibleColumns() {
-      let count = 1
-      count += this.isTVShow ? 1 : 0
-      count +=
-        !this.isCurrentUserClient && this.isShowInfos && this.isAssetDescription
-          ? 1
-          : 0
-      count += this.visibleMetadataDescriptors.length
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isAssetTime &&
-        this.metadataDisplayHeaders.timeSpent
-          ? 1
-          : 0
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isAssetEstimation &&
-        this.metadataDisplayHeaders.estimation
-          ? 1
-          : 0
-      count += this.displayedValidationColumns.length
-      return count
-    },
-
     displayedValidationColumns() {
       return this.validationColumns.filter(columnId => {
         return (
           this.assetFilledColumns[columnId] &&
-          (!this.hiddenColumns[columnId] || this.isShowInfos)
+          (!this.hiddenColumns[columnId] || this.displaySettings.showInfos)
         )
       })
     },
@@ -814,14 +769,14 @@ export default {
     },
 
     localStorageStickKey() {
-      return `stick-assets-${this.currentProduction.id}`
+      return `stick-assets-${this.currentProduction?.id}`
     },
 
     readyForTaskTypes() {
       return [
         {
           id: null,
-          name: 'No task type',
+          name: this.$t('tasks.fields.no_task_type'),
           color: '#CCC'
         },
         ...sortTaskTypes(this.productionShotTaskTypes, this.currentProduction)
@@ -829,7 +784,7 @@ export default {
     },
 
     isAssetsOnly() {
-      return this.currentProduction.production_type === 'assets'
+      return this.currentProduction?.production_type === 'assets'
     },
 
     formatDurationInHours() {
@@ -953,7 +908,7 @@ export default {
       const route = {
         name: section,
         params: {
-          production_id: this.currentProduction.id
+          production_id: this.currentProduction?.id
         }
       }
 
@@ -1005,7 +960,7 @@ export default {
         let offset = this.$refs['th-name'].clientWidth
         this.offsets = {}
 
-        if (this.isShowInfos) {
+        if (this.displaySettings.showInfos) {
           for (
             let metadataCol = 0;
             metadataCol < this.stickedVisibleMetadataDescriptors.length;
@@ -1050,7 +1005,7 @@ export default {
       this.updateOffsets()
     },
 
-    isBigThumbnails() {
+    'displaySettings.bigThumbnails'() {
       this.updateOffsets()
     },
 
@@ -1200,5 +1155,9 @@ td.metadata-descriptor {
   height: 3.1rem;
   max-width: 120px;
   padding: 0;
+}
+
+.metadata-value {
+  padding: 0.5rem 0.75rem;
 }
 </style>

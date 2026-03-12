@@ -40,7 +40,8 @@ export const playerMixin = {
       playingPreviewFileId: null,
       speed: 3,
       task: null,
-      textColor: '#ff3860'
+      textColor: '#ff3860',
+      volume: 50
     }
   },
 
@@ -75,6 +76,10 @@ export const playerMixin = {
 
     picturePlayer() {
       return this.$refs['picture-player']
+    },
+
+    picturePlayerComparison() {
+      return this.$refs['picture-player-comparison']
     },
 
     soundPlayer() {
@@ -129,7 +134,8 @@ export const playerMixin = {
         !this.isCurrentPreviewMovie &&
         !this.isCurrentPreviewPicture &&
         !this.isCurrentPreviewSound &&
-        !this.isCurrentPreviewModel
+        !this.isCurrentPreviewModel &&
+        !this.isCurrentPreviewPdf
       )
     },
 
@@ -214,11 +220,10 @@ export const playerMixin = {
           annotations: this.currentEntity.preview_file_annotations || [],
           duration: this.currentEntity.preview_file_duration || 0
         }
-      } else {
-        return this.currentEntity.preview_file_previews[
-          this.currentPreviewIndex - 1
-        ]
       }
+      return this.currentEntity.preview_file_previews?.[
+        this.currentPreviewIndex - 1
+      ]
     },
 
     currentEntityPreviewLength() {
@@ -226,17 +231,6 @@ export const playerMixin = {
         return 0
       }
       return this.currentEntity.preview_file_previews.length + 1
-    },
-
-    isFullScreenEnabled() {
-      return !!(
-        document.fullscreenEnabled ||
-        document.mozFullScreenEnabled ||
-        document.msFullscreenEnabled ||
-        document.webkitSupportsFullscreen ||
-        document.webkitFullscreenEnabled ||
-        document.createElement('video').webkitRequestFullScreen
-      )
     },
 
     // Frames
@@ -322,17 +316,7 @@ export const playerMixin = {
           false
         )
         this.container.addEventListener(
-          'mozfullscreenchange',
-          this.onFullScreenChange,
-          false
-        )
-        this.container.addEventListener(
-          'MSFullscreenChange',
-          this.onFullScreenChange,
-          false
-        )
-        this.container.addEventListener(
-          'webkitfullscreenchange',
+          'webkitfullscreenchange', // Safari < 16.4
           this.onFullScreenChange,
           false
         )
@@ -352,17 +336,7 @@ export const playerMixin = {
           false
         )
         this.container.removeEventListener(
-          'mozfullscreenchange',
-          this.onFullScreenChange,
-          false
-        )
-        this.container.removeEventListener(
-          'MSFullscreenChange',
-          this.onFullScreenChange,
-          false
-        )
-        this.container.removeEventListener(
-          'webkitfullscreenchange',
+          'webkitfullscreenchange', // Safari < 16.4
           this.onFullScreenChange,
           false
         )
@@ -555,7 +529,11 @@ export const playerMixin = {
             this.setAnnotationDrawingMode(true)
           }, 100)
         }
-        if (this.isPlaying && this.isPicture(entity.preview_file_extension)) {
+        if (
+          this.isPlaying &&
+          entity &&
+          this.isPicture(entity.preview_file_extension)
+        ) {
           this.playPicture()
         }
       }
@@ -680,49 +658,29 @@ export const playerMixin = {
     },
 
     setFullScreen() {
-      if (this.container.requestFullscreen) {
-        this.container.requestFullscreen()
-      } else if (this.container.mozRequestFullScreen) {
-        this.container.mozRequestFullScreen()
-      } else if (this.container.webkitRequestFullScreen) {
-        this.container.webkitRequestFullScreen()
-      } else if (this.container.msRequestFullscreen) {
-        this.container.msRequestFullscreen()
-      }
-      this.container.setAttribute('data-fullscreen', !!true)
-      document.activeElement.blur()
-      this.fullScreen = true
+      this.documentSetFullScreen(this.container)
+        .then(() => {
+          this.container.setAttribute('data-fullscreen', true)
+          document.activeElement.blur()
+          this.fullScreen = true
+        })
+        .catch(console.error)
     },
 
     exitFullScreen() {
-      if (document.exitFullscreen) {
-        document.exitFullscreen()
-      } else if (document.mozCancelFullScreen) {
-        document.mozCancelFullScreen()
-      } else if (document.webkitCancelFullScreen) {
-        document.webkitCancelFullScreen()
-      } else if (document.msExitFullscreen) {
-        document.msExitFullscreen()
-      }
-      this.container.setAttribute('data-fullscreen', !!false)
-      document.activeElement.blur()
-      this.fullScreen = false
+      this.documentExitFullScreen()
+        .then(() => {
+          this.container.setAttribute('data-fullscreen', false)
+          document.activeElement.blur()
+          this.fullScreen = false
+        })
+        .catch(console.error)
       setTimeout(() => {
         this.triggerResize()
       }, 200)
       setTimeout(() => {
         this.triggerResize()
       }, 500)
-    },
-
-    isFullScreen() {
-      return !!(
-        document.fullscreen ||
-        document.webkitIsFullScreen ||
-        document.mozFullScreen ||
-        document.msFullscreenElement ||
-        document.fullscreenElement
-      )
     },
 
     onScrubStart() {
@@ -872,6 +830,7 @@ export const playerMixin = {
       const RIGHTKEY = 39
       const PREVANNKEY = ','
       const NEXTANNKEY = '.'
+      const OKEY = 'o'
 
       if (!['INPUT', 'TEXTAREA'].includes(event.target.tagName)) {
         if (
@@ -956,6 +915,10 @@ export const playerMixin = {
           event.preventDefault()
           event.stopPropagation()
           this.onPreviousDrawingClicked()
+        } else if (event.altKey && event.key === OKEY) {
+          event.preventDefault()
+          event.stopPropagation()
+          this.toggleFullOverlayComparison()
         } else if (
           (event.ctrlKey || event.metaKey) &&
           event.altKey &&
@@ -980,13 +943,28 @@ export const playerMixin = {
     onWindowResize() {
       const now = new Date().getTime()
       this.lastCall = this.lastCall || 0
-      if (now - this.lastCall > 600) {
+      if (now - this.lastCall > 100) {
         this.lastCall = now
         setTimeout(() => {
           this.resetHeight()
           this.resizeAnnotations()
         }, 200)
       }
+    },
+
+    async toggleFullOverlayComparison() {
+      if (!this.isComparing) {
+        this.isComparing = true
+        await this.$nextTick()
+        await this.$nextTick()
+      }
+      this.$nextTick(() => {
+        if (this.comparisonMode === 'overlay100') {
+          this.comparisonMode = 'overlay0'
+        } else {
+          this.comparisonMode = 'overlay100'
+        }
+      })
     },
 
     reloadAnnotations(current = true) {
@@ -1093,14 +1071,6 @@ export const playerMixin = {
         this.saveUserComparisonChoice()
         this.comparisonEntityMissing = false
       })
-      this.updateRoomStatus()
-    },
-
-    onSpeedClicked() {
-      const rates = [0.25, 0.5, 1, 1.5, 2]
-      this.speed = (this.speed % rates.length) + 1
-      const rate = rates[this.speed - 1]
-      this.setPlayerSpeed(rate)
       this.updateRoomStatus()
     },
 
@@ -1215,6 +1185,10 @@ export const playerMixin = {
 
     resetCanvasSize() {
       return this.$nextTick().then(() => {
+        if (!this.zoomEnabled) {
+          this.resetPanZoom()
+        }
+
         if (this.isCurrentPreviewMovie && this.isAnnotationCanvas()) {
           if (this.canvas) {
             // Video Ratio
@@ -1254,7 +1228,7 @@ export const playerMixin = {
             const naturalHeight = naturalDimensions.height
             const ratio = naturalWidth / naturalHeight
 
-            if (!this.$refs['video-container']) return Promise.resolve()
+            if (!this.$refs['video-container']) return
 
             // Container size
             let fullWidth = this.$refs['video-container'].offsetWidth
@@ -1266,8 +1240,8 @@ export const playerMixin = {
             // Init canvas values
             let width = ratio ? fullHeight * ratio : fullWidth
             let height = ratio ? Math.round(fullWidth / ratio) : fullHeight
-            let top = 0
-            let left = 0
+            let top
+            let left
             this.canvas.style.top = '0px'
             this.canvas.style.left = '0px'
 
@@ -1312,7 +1286,6 @@ export const playerMixin = {
             this.setAnnotationCanvasDimensions(width, height)
           }
         }
-        return Promise.resolve()
       })
     },
 
@@ -1464,15 +1437,14 @@ export const playerMixin = {
       this.maxDuration = '00:00.000'
     },
 
-    resetPictureCanvas() {
-      if (!this.currentPreview) return Promise.resolve()
+    async resetPictureCanvas() {
+      if (!this.currentPreview) return
       this.annotations = this.currentPreview.annotations || []
-      return this.resetCanvas().then(() => {
-        this.resetCanvasVisibility()
-        if (this.isCurrentPreviewPicture) {
-          if (!this.isPlaying) this.loadAnnotation(this.getAnnotation(0))
-        }
-      })
+      await this.resetCanvas()
+      this.resetCanvasVisibility()
+      if (this.isCurrentPreviewPicture) {
+        if (!this.isPlaying) this.loadAnnotation(this.getAnnotation(0))
+      }
     },
 
     // Scrubbing
@@ -1591,6 +1563,13 @@ export const playerMixin = {
       if (this.isCurrentPreviewSound) {
         this.soundPlayer?.redraw()
       }
+    },
+
+    speed() {
+      const rates = [0.25, 0.5, 1, 1.5, 2]
+      const rate = rates[this.speed - 1]
+      this.setPlayerSpeed(rate)
+      this.updateRoomStatus()
     }
   },
 

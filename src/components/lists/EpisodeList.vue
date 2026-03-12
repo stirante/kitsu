@@ -54,7 +54,7 @@
               </div>
             </th>
 
-            <template v-if="isShowInfos">
+            <template v-if="displaySettings.showInfos">
               <metadata-header
                 :ref="`editor-${j}`"
                 :key="descriptor.id"
@@ -98,12 +98,16 @@
             <th
               scope="col"
               class="description selectable"
-              v-if="!isCurrentUserClient && isShowInfos && isEpisodeDescription"
+              v-if="
+                !isCurrentUserClient &&
+                displaySettings.showInfos &&
+                isEpisodeDescription
+              "
             >
               {{ $t('episodes.fields.description') }}
             </th>
 
-            <template v-if="isShowInfos">
+            <template v-if="displaySettings.showInfos">
               <metadata-header
                 :key="descriptor.id"
                 :descriptor="descriptor"
@@ -119,7 +123,7 @@
               ref="th-spent"
               v-if="
                 !isCurrentUserClient &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isEpisodeTime &&
                 metadataDisplayHeaders.timeSpent
               "
@@ -133,7 +137,7 @@
               ref="th-spent"
               v-if="
                 !isCurrentUserClient &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isEpisodeEstimation &&
                 metadataDisplayHeaders.estimation
               "
@@ -144,7 +148,7 @@
               scope="col"
               class="status"
               ref="th-status"
-              v-if="isShowInfos && metadataDisplayHeaders.status"
+              v-if="displaySettings.showInfos && metadataDisplayHeaders.status"
             >
               {{ $t('main.status') }}
             </th>
@@ -152,7 +156,11 @@
             <th
               scope="col"
               class="resolution selectable"
-              v-if="!isCurrentUserClient && isShowInfos && isEpisodeResolution"
+              v-if="
+                !isCurrentUserClient &&
+                displaySettings.showInfos &&
+                isEpisodeResolution
+              "
             >
               {{ $t('shots.fields.resolution') }}
             </th>
@@ -199,14 +207,17 @@
                 namespace="episodes"
                 v-model="metadataDisplayHeaders"
                 v-show="columnSelectorDisplayed"
-                v-if="isShowInfos"
+                v-if="displaySettings.showInfos"
               />
 
               <button-simple
                 class="is-small is-pulled-right mr05"
                 icon="down"
                 @click="toggleColumnSelector"
-                v-if="episodeMetadataDescriptors.length > 0 && isShowInfos"
+                v-if="
+                  episodeMetadataDescriptors.length > 0 &&
+                  displaySettings.showInfos
+                "
               />
             </th>
           </tr>
@@ -231,23 +242,27 @@
                 <div class="flexrow">
                   <entity-thumbnail
                     :entity="episode"
-                    :width="isBigThumbnails ? 150 : 50"
-                    :height="isBigThumbnails ? 100 : 33"
-                    :empty-width="isBigThumbnails ? 150 : 50"
-                    :empty-height="isBigThumbnails ? 100 : 34"
+                    :width="displaySettings.bigThumbnails ? 150 : 50"
+                    :height="displaySettings.bigThumbnails ? 100 : 33"
+                    :empty-width="displaySettings.bigThumbnails ? 150 : 50"
+                    :empty-height="displaySettings.bigThumbnails ? 100 : 34"
                   />
                   <router-link
                     tabindex="-1"
                     :title="episode.name"
                     :to="episodePath(episode.id)"
+                    v-if="!isCurrentUserClient"
                   >
                     {{ episode.name }}
                   </router-link>
+                  <template v-else>
+                    {{ episode.name }}
+                  </template>
                 </div>
               </th>
 
               <!-- Metadata stick -->
-              <template v-if="isShowInfos">
+              <template v-if="displaySettings.showInfos">
                 <td
                   :ref="`editor-${i}-${j}`"
                   class="metadata-descriptor datatable-row-header"
@@ -283,9 +298,9 @@
                   }"
                   :column="taskTypeMap.get(columnId)"
                   :column-y="j"
-                  :contact-sheet="contactSheetMode"
+                  :contact-sheet="displaySettings.contactSheetMode"
                   :entity="episode"
-                  :is-assignees="isShowAssignations"
+                  :is-assignees="displaySettings.showAssignations"
                   :is-static="true"
                   :left="
                     offsets['validation-' + j]
@@ -311,12 +326,14 @@
                   value => onDescriptionChanged(episode, value)
                 "
                 v-if="
-                  !isCurrentUserClient && isShowInfos && isEpisodeDescription
+                  !isCurrentUserClient &&
+                  displaySettings.showInfos &&
+                  isEpisodeDescription
                 "
               />
 
               <!-- other Metadata cells -->
-              <template v-if="isShowInfos">
+              <template v-if="displaySettings.showInfos">
                 <td
                   class="metadata-descriptor"
                   :title="
@@ -340,7 +357,7 @@
                 class="time-spent selectable"
                 v-if="
                   !isCurrentUserClient &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   isEpisodeTime &&
                   metadataDisplayHeaders.timeSpent
                 "
@@ -352,7 +369,7 @@
                 class="estimation selectable"
                 v-if="
                   !isCurrentUserClient &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   isEpisodeEstimation &&
                   metadataDisplayHeaders.estimation
                 "
@@ -364,7 +381,9 @@
                 scope="col"
                 class="status metadata-descriptor"
                 ref="th-status"
-                v-if="isShowInfos && metadataDisplayHeaders.status"
+                v-if="
+                  displaySettings.showInfos && metadataDisplayHeaders.status
+                "
               >
                 <span class="select">
                   <select
@@ -386,7 +405,10 @@
                 </span>
               </td>
 
-              <td class="resolution" v-if="isEpisodeResolution && isShowInfos">
+              <td
+                class="resolution"
+                v-if="isEpisodeResolution && displaySettings.showInfos"
+              >
                 <input
                   :class="{
                     'input-editor': true,
@@ -427,7 +449,7 @@
                     'validation-cell': !hiddenColumns[columnId],
                     'hidden-validation-cell': hiddenColumns[columnId]
                   }"
-                  :contact-sheet="contactSheetMode"
+                  :contact-sheet="displaySettings.contactSheetMode"
                   :column="taskTypeMap.get(columnId)"
                   :entity="episode"
                   :task-test="
@@ -443,7 +465,7 @@
                   "
                   :row-x="i"
                   :column-y="j"
-                  :is-assignees="isShowAssignations"
+                  :is-assignees="displaySettings.showAssignations"
                   @select="onTaskSelected"
                   @unselect="onTaskUnselected"
                   v-for="(columnId, j) in nonStickedDisplayedValidationColumns"
@@ -478,19 +500,31 @@
       {{ displayedEpisodesLength }}
       {{ $tc('episodes.number', displayedEpisodesLength) }}
       <span
-        v-if="displayedEpisodesTimeSpent > 0 && displayedEpisodesEstimation > 0"
+        v-if="displayedEpisodesTimeSpent > 0 || displayedEpisodesEstimation > 0"
       >
         ({{ formatDuration(displayedEpisodesTimeSpent) }}
         {{
           isDurationInHours
-            ? $tc('main.hours_spent', displayedEpisodesTimeSpent)
-            : $tc('main.days_spent', displayedEpisodesTimeSpent)
+            ? $tc(
+                'main.hours_spent',
+                formatDuration(displayedEpisodesTimeSpent, false)
+              )
+            : $tc(
+                'main.days_spent',
+                formatDuration(displayedEpisodesTimeSpent, false)
+              )
         }},
         {{ formatDuration(displayedEpisodesEstimation) }}
         {{
           isDurationInHours
-            ? $tc('main.hours_estimated', displayedEpisodesEstimation)
-            : $tc('main.man_days', displayedEpisodesEstimation)
+            ? $tc(
+                'main.hours_estimated',
+                formatDuration(displayedEpisodesEstimation, false)
+              )
+            : $tc(
+                'main.man_days',
+                formatDuration(displayedEpisodesEstimation, false)
+              )
         }})
       </span>
     </p>
@@ -538,6 +572,10 @@ export default {
     displayedEpisodes: {
       type: Array,
       default: () => []
+    },
+    displaySettings: {
+      type: Object,
+      default: () => {}
     },
     isError: {
       type: Boolean,
@@ -618,7 +656,7 @@ export default {
       'displayedEpisodesEstimation',
       'displayedEpisodesLength',
       'displayedEpisodesTimeSpent',
-      'isBigThumbnails',
+      'displaySettings.bigThumbnails',
       'isCurrentUserAdmin',
       'isCurrentUserManager',
       'isCurrentUserSupervisor',
@@ -628,8 +666,8 @@ export default {
       'isEpisodeEstimation',
       'isEpisodeResolution',
       'isEpisodeTime',
-      'isShowAssignations',
-      'isShowInfos',
+      'displaySettings.showAssignations',
+      'displaySettings.showInfos',
       'nbSelectedTasks',
       'selectedTasks',
       'taskMap',
@@ -653,38 +691,11 @@ export default {
       )
     },
 
-    visibleColumns() {
-      let count = 2
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isEpisodeDescription
-          ? 1
-          : 0
-      count += this.visibleMetadataDescriptors.length
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isEpisodeTime &&
-        this.metadataDisplayHeaders.timeSpent
-          ? 1
-          : 0
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isEpisodeEstimation &&
-        this.metadataDisplayHeaders.estimation
-          ? 1
-          : 0
-      count += this.displayedValidationColumns.length
-      return count
-    },
-
     displayedValidationColumns() {
       return this.validationColumns.filter(columnId => {
         return (
           this.episodeFilledColumns[columnId] &&
-          (!this.hiddenColumns[columnId] || this.isShowInfos)
+          (!this.hiddenColumns[columnId] || this.displaySettings.showInfos)
         )
       })
     },
@@ -694,7 +705,7 @@ export default {
     },
 
     localStorageStickKey() {
-      return `stick-episodes-${this.currentProduction.id}`
+      return `stick-episodes-${this.currentProduction?.id}`
     }
   },
 
@@ -716,7 +727,7 @@ export default {
       const route = {
         name: section,
         params: {
-          production_id: this.currentProduction.id
+          production_id: this.currentProduction?.id
         }
       }
       if (episodeId) {
@@ -748,10 +759,6 @@ export default {
     },
 
     isLoading() {
-      this.updateOffsets()
-    },
-
-    isBigThumbnails() {
       this.updateOffsets()
     }
   }
@@ -855,10 +862,6 @@ span.thumbnail-empty {
   padding: 6px;
 }
 
-.datatable-row-header {
-  cursor: pointer;
-}
-
 th .input-editor,
 td .input-editor {
   color: $grey-strong;
@@ -949,7 +952,7 @@ td .select {
 }
 
 .metadata-value {
-  padding: 0.8rem;
+  padding: 0.5rem 0.75rem;
 }
 
 .resolution {

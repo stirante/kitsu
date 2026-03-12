@@ -394,7 +394,7 @@ export default {
         } else if (this.currentPlayer) {
           this.currentPlayer.src = ''
         }
-        if (nextEntity.preview_file_extension === 'mp4' && this.nextPlayer) {
+        if (nextEntity?.preview_file_extension === 'mp4' && this.nextPlayer) {
           this.nextPlayer.src = this.getMoviePath(nextEntity)
         } else if (this.nextPlayer) {
           this.nextPlayer.src = ''
@@ -640,6 +640,12 @@ export default {
       this.$nextTick(() => {
         this.$options.silent = false
       })
+    },
+
+    setVolume(volume) {
+      if (!this.currentPlayer) return
+      this.currentPlayer.volume = volume / 100
+      this.nextPlayer.volume = volume / 100
     }
   },
 

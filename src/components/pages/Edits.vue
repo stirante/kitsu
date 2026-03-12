@@ -29,16 +29,11 @@
               v-if="departments.length > 0"
             />
             <div class="flexrow flexrow-item" v-if="!isCurrentUserClient">
-              <button-simple
+              <combobox-display-options
                 class="flexrow-item"
-                icon="grid"
-                :is-on="contactSheetMode"
-                :title="$t('tasks.show_contact_sheet')"
-                @click="contactSheetMode = !contactSheetMode"
+                :type="type"
+                v-model="displaySettings"
               />
-              <show-assignations-button class="flexrow-item" />
-              <show-infos-button class="flexrow-item" />
-              <big-thumbnails-button class="flexrow-item" />
             </div>
             <div class="flexrow" v-if="isCurrentUserManager">
               <button-simple
@@ -85,12 +80,12 @@
         />
         <edit-list
           ref="edit-list"
-          :contact-sheet-mode="contactSheetMode"
           :displayed-edits="displayedEdits"
           :is-loading="isEditsLoading || initialLoading"
           :is-error="isEditsLoadingError"
           :validation-columns="editValidationColumns"
           :department-filter="departmentFilter"
+          :display-settings="displaySettings"
           @add-metadata="onAddMetadataClicked"
           @change-sort="onChangeSortClicked"
           @create-tasks="showCreateTasksModal"
@@ -229,13 +224,14 @@
 
     <add-thumbnails-modal
       ref="add-thumbnails-modal"
+      active
       entity-type="Edit"
       :parent="isTVShow ? 'edits_tvshow' : 'edits'"
-      :active="modals.isAddThumbnailsDisplayed"
       :is-loading="loading.addThumbnails"
       :is-error="errors.addThumbnails"
       @cancel="hideAddThumbnailsModal"
       @confirm="confirmAddThumbnails"
+      v-if="modals.isAddThumbnailsDisplayed"
     />
 
     <edit-history-modal
@@ -268,10 +264,10 @@ import { entitiesMixin } from '@/components/mixins/entities'
 
 import AddMetadataModal from '@/components/modals/AddMetadataModal.vue'
 import AddThumbnailsModal from '@/components/modals/AddThumbnailsModal.vue'
-import BigThumbnailsButton from '@/components/widgets/BigThumbnailsButton.vue'
 import BuildFilterModal from '@/components/modals/BuildFilterModal.vue'
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
 import ComboboxDepartment from '@/components/widgets/ComboboxDepartment.vue'
+import ComboboxDisplayOptions from '@/components/widgets/ComboboxDisplayOptions.vue'
 import CreateTasksModal from '@/components/modals/CreateTasksModal.vue'
 import DeleteModal from '@/components/modals/DeleteModal.vue'
 import EditEditModal from '@/components/modals/EditEditModal.vue'
@@ -281,8 +277,6 @@ import HardDeleteModal from '@/components/modals/HardDeleteModal.vue'
 import SearchField from '@/components/widgets/SearchField.vue'
 import SearchQueryList from '@/components/widgets/SearchQueryList.vue'
 import SortingInfo from '@/components/widgets/SortingInfo.vue'
-import ShowAssignationsButton from '@/components/widgets/ShowAssignationsButton.vue'
-import ShowInfosButton from '@/components/widgets/ShowInfosButton.vue'
 import EditHistoryModal from '@/components/modals/EditHistoryModal.vue'
 import EditList from '@/components/lists/EditList.vue'
 import TaskInfo from '@/components/sides/TaskInfo.vue'
@@ -295,10 +289,10 @@ export default {
   components: {
     AddMetadataModal,
     AddThumbnailsModal,
-    BigThumbnailsButton,
     BuildFilterModal,
     ButtonSimple,
     ComboboxDepartment,
+    ComboboxDisplayOptions,
     CreateTasksModal,
     DeleteModal,
     EditEditModal,
@@ -309,8 +303,6 @@ export default {
     SearchQueryList,
     SortingInfo,
     EditHistoryModal,
-    ShowAssignationsButton,
-    ShowInfosButton,
     EditList,
     TaskInfo
   },
@@ -389,8 +381,7 @@ export default {
     if (this.editSearchText.length > 0) {
       this.$refs['edit-search-field']?.setValue(this.editSearchText)
     }
-    this.$refs['edit-list'].setScrollPosition(this.editListScrollPosition)
-    this.$refs['edit-list'].setScrollPosition(this.editListScrollPosition)
+    this.$refs['edit-list']?.setScrollPosition(this.editListScrollPosition)
     const finalize = () => {
       if (this.$refs['edit-list']) {
         this.applySearchFromUrl()
@@ -606,7 +597,7 @@ export default {
         .then(form => {
           this.loading.edit = false
           this.modals.isNewDisplayed = false
-          this.applySearchFromUrl()
+          this.applySearchFromUrl(false)
         })
         .catch(err => {
           console.error(err)
@@ -664,7 +655,7 @@ export default {
 
     confirmAddThumbnails(forms) {
       const addPreview = form => {
-        this.addThumbnailsModal.markLoading(form.task.entity_id)
+        this.addThumbnailsModal?.markLoading(form.task.entity_id)
         return this.commentTaskWithPreview({
           taskId: form.task.id,
           commentText: '',
@@ -679,8 +670,7 @@ export default {
             })
           })
           .then(() => {
-            this.addThumbnailsModal.markUploaded(form.task.entity_id)
-            return Promise.resolve()
+            this.addThumbnailsModal?.markUploaded(form.task.entity_id)
           })
       }
       this.loading.addThumbnails = true
@@ -931,7 +921,7 @@ export default {
         [fieldName]: value
       }
       await this.editEdit(data)
-      this.applySearchFromUrl()
+      this.applySearchFromUrl(false)
     },
 
     async onMetadataChanged({ entry, descriptor, value }) {
@@ -942,7 +932,7 @@ export default {
         }
       }
       await this.editEdit(data)
-      this.applySearchFromUrl()
+      this.applySearchFromUrl(false)
     }
   },
 

@@ -16,22 +16,24 @@
     />
 
     <edit-custom-action-modal
-      :active="modals.edit"
+      active
       :is-loading="loading.edit"
       :is-error="errors.edit"
       :custom-action-to-edit="customActionToEdit"
       @cancel="modals.edit = false"
       @confirm="confirmEditCustomAction"
+      v-if="modals.edit"
     />
 
     <delete-modal
-      :active="modals.del"
+      active
       :is-loading="loading.del"
       :is-error="errors.del"
       :text="deleteText"
       :error-text="$t('custom_actions.delete_error')"
       @cancel="modals.del = false"
       @confirm="confirmDeleteCustomAction"
+      v-if="modals.del"
     />
   </div>
 </template>
@@ -93,15 +95,16 @@ export default {
     }
   },
 
-  created() {
+  async created() {
     this.loading.list = true
     this.errors.list = false
-    this.loadCustomActions(err => {
+    try {
+      await this.loadCustomActions()
+    } catch {
+      this.errors.list = true
+    } finally {
       this.loading.list = false
-      if (err) {
-        this.errors.list = true
-      }
-    })
+    }
   },
 
   methods: {
@@ -123,13 +126,15 @@ export default {
       this.errors.edit = false
       this[action](form)
         .then(() => {
-          this.loading.edit = false
           this.modals.edit = false
         })
         .catch(err => {
           console.error(err)
           this.errors.edit = true
           this.modals.isNewDisplayed = false
+        })
+        .finally(() => {
+          this.loading.edit = false
         })
     },
 
@@ -138,12 +143,13 @@ export default {
       this.errors.del = false
       this.deleteCustomAction(this.customActionToDelete)
         .then(() => {
-          this.loading.del = false
           this.modals.del = false
         })
         .catch(err => {
           console.error(err)
           this.errors.del = true
+        })
+        .finally(() => {
           this.loading.del = false
         })
     },

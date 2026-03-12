@@ -18,7 +18,7 @@
               :label="$t('shots.fields.episode')"
               :options="runningEpisodeOptions"
               v-model="episodeId"
-              v-if="isTVShow"
+              v-if="!isStudio && isTVShow"
             />
             <combobox-status
               class="flexrow-item selector"
@@ -38,8 +38,7 @@
               </label>
               <people-field
                 class="person-field"
-                :people="team"
-                small
+                :people="isStudio ? displayedPeople : team"
                 v-model="person"
               />
             </div>
@@ -91,8 +90,8 @@
                   }}
                 </div>
                 <div
-                  :key="'news-' + news.id"
-                  :ref="'news-' + news.id"
+                  :key="`news-${news.id}`"
+                  :ref="`news-${news.id}`"
                   v-for="(news, index) in dayList"
                 >
                   <div v-if="previewMode === 'comments'">
@@ -242,13 +241,7 @@
                           0,
                           10
                         )}-${index}`"
-                        :previews="[
-                          {
-                            id: news.preview_file_id,
-                            extension: news.preview_file_extension,
-                            annotations: news.preview_file_annotations
-                          }
-                        ]"
+                        :previews="news.preview_files"
                         :task="{
                           id: news.task_id,
                           project_id: news.project_id,
@@ -271,8 +264,9 @@
 
     <div id="side-column" class="column side-column">
       <task-info
-        :task="currentTask"
+        :entity-type="currentEntityType"
         :is-loading="loading.currentTask"
+        :task="currentTask"
         with-actions
       />
     </div>
@@ -393,6 +387,7 @@ export default {
   computed: {
     ...mapGetters([
       'currentProduction',
+      'displayedPeople',
       'isTVShow',
       'newsList',
       'newsTotal',
@@ -405,9 +400,12 @@ export default {
       'runningEpisodes',
       'taskStatusMap',
       'taskTypeMap',
-      'taskStatusMap',
-      'user'
+      'taskStatusMap'
     ]),
+
+    currentEntityType() {
+      return this.currentTask?.task_type?.for_entity
+    },
 
     statMax() {
       if (this.newsStats) {
@@ -477,8 +475,11 @@ export default {
     },
 
     team() {
-      const team = this.currentProduction?.team || []
-      return sortPeople(team.map(personId => this.personMap.get(personId)))
+      return sortPeople(
+        this.currentProduction?.team
+          .map(personId => this.personMap.get(personId))
+          .filter(Boolean) ?? []
+      )
     },
 
     renderedStats() {
@@ -507,10 +508,10 @@ export default {
       if (this.newsList && this.newsList.length > 0 && event.altKey) {
         let index = this.lastSelection ? this.lastSelection : 0
         if ([37, 38].includes(event.keyCode)) {
-          index = index - 1 < 0 ? (index = this.newsList.length - 1) : index - 1
+          index = index - 1 < 0 ? this.newsList.length - 1 : index - 1
           this.onNewsSelected(this.newsList[index])
         } else if ([39, 40].includes(event.keyCode)) {
-          index = index + 1 >= this.newsList.length ? (index = 0) : index + 1
+          index = index + 1 >= this.newsList.length ? 0 : index + 1
           this.onNewsSelected(this.newsList[index])
         }
       }
@@ -615,7 +616,7 @@ export default {
           task_status_id: this.params.task_status_id,
           task_type_id: this.params.task_type_id
         }
-        if (this.$router) this.$router.push({ query })
+        this.$router.push({ query })
         this.loadNews(this.params)
           .then(() => {
             this.loading.news = false
@@ -683,12 +684,13 @@ export default {
 
       'news:new'(eventData) {
         if (
-          eventData.project_id === this.currentProduction.id &&
+          (this.isStudio ||
+            eventData.project_id === this.currentProduction.id) &&
           (!this.taskTypeId || this.taskTypeId === eventData.task_type_id) &&
           (!this.taskStatusId || this.taskStatusId === eventData.task_status_id)
         ) {
           this.loadSingleNews({
-            productionId: this.currentProduction.id,
+            productionId: eventData.project_id,
             newsId: eventData.news_id
           })
         }
@@ -696,11 +698,13 @@ export default {
 
       'task:update'(eventData) {
         const relatedNews = this.newsList.find(
-          n => n.task_id === eventData.task_id
+          news =>
+            news.project_id === eventData.project_id &&
+            news.task_id === eventData.task_id
         )
         if (relatedNews) {
           this.loadSingleNews({
-            productionId: this.currentProduction.id,
+            productionId: relatedNews.project_id,
             newsId: relatedNews.id
           })
         }
@@ -710,6 +714,10 @@ export default {
 
   watch: {
     currentProduction() {
+      this.init()
+    },
+
+    isStudio() {
       this.init()
     },
 

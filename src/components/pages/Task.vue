@@ -10,12 +10,29 @@
             <corner-left-up-icon />
           </router-link>
 
-          <task-type-name
-            class="flexrow-item task-type block"
-            :task-type="taskType"
-            :production-id="currentProduction.id"
-            v-if="taskType"
-          />
+          <div class="flexrow-item block flexrow task-type">
+            <router-link
+              class="flexrow-item mt05"
+              :to="previousEntityTaskPath"
+              v-if="previousEntityTaskPath"
+            >
+              <chevron-left-icon />
+            </router-link>
+
+            <router-link
+              class="flexrow-item mt05"
+              :to="nextEntityTaskPath"
+              v-if="nextEntityTaskPath"
+            >
+              <chevron-right-icon />
+            </router-link>
+            <task-type-name
+              class="flexrow-item"
+              :task-type="taskType"
+              :production-id="currentProduction?.id"
+              v-if="taskType"
+            />
+          </div>
 
           <span class="flexrow-item ml2">
             <entity-thumbnail
@@ -29,9 +46,12 @@
           </span>
 
           <h1 class="title flexrow-item">
-            <router-link :to="taskEntityPath">
-              {{ task ? title : 'Loading...' }}
+            <router-link :to="taskEntityPath" v-if="!isCurrentUserClient">
+              {{ title }}
             </router-link>
+            <template v-else>
+              {{ title }}
+            </template>
           </h1>
 
           <div class="flexrow-item flexrow block">
@@ -70,6 +90,22 @@
               @click="toggleSubscribe"
               v-if="!isAssigned"
             />
+
+            <router-link
+              class="flexrow-item"
+              :to="previousTaskPath"
+              v-if="previousTaskPath"
+            >
+              <chevron-up-icon />
+            </router-link>
+
+            <router-link
+              class="flexrow-item"
+              :to="nextTaskPath"
+              v-if="nextTaskPath"
+            >
+              <chevron-down-icon />
+            </router-link>
           </div>
         </div>
       </div>
@@ -94,15 +130,25 @@
 
               <div
                 class="set-main-preview flexrow-item flexrow pull-right"
-                v-if="isCurrentUserManager && $refs['preview-player']"
+                v-if="currentPreview"
               >
                 <button
+                  class="button flexrow-item playlist-button"
+                  @click="showHookupPlaylistModal"
+                  v-if="isHookupButtonVisible"
+                >
+                  <kitsu-icon
+                    name="playlists"
+                    :title="$t('tasks.hookup_playlist')"
+                  />
+                </button>
+                <button
+                  class="button flexrow-item mr0"
                   :class="{
-                    button: true,
-                    'flexrow-item': true,
                     'is-loading': loading.setPreview
                   }"
                   @click="setPreview"
+                  v-if="isCurrentUserManager"
                 >
                   <image-icon class="icon" />
                   <span class="text">
@@ -113,6 +159,12 @@
                   {{ $t('tasks.set_preview_error') }}
                 </span>
               </div>
+              <view-playlist-modal
+                :active="modals.hookupPlaylist"
+                :task-ids="hookupPlaylistTaskIds"
+                sort
+                @cancel="hideHookupPlaylistModal"
+              />
             </div>
 
             <div class="preview-area mt1">
@@ -138,7 +190,10 @@
               </div>
             </div>
           </div>
-          <div class="flexrow-item block mt1 mr0 info-block">
+          <div
+            class="flexrow-item block mt1 mr0 info-block"
+            v-if="!isCurrentUserClient"
+          >
             <page-subtitle :text="$t('main.info')" />
             <div class="table-body mt1">
               <table class="datatable no-header" v-if="task">
@@ -203,6 +258,7 @@
                 :is-loading="loading.addComment"
                 :is-movie="isMovie"
                 :team="currentTeam"
+                :task-types="currentTaskTypes"
                 :task="task"
                 :task-status="taskStatusForCurrentUser"
                 :preview-forms="previewForms"
@@ -251,6 +307,7 @@
                     :revision="currentRevision"
                     :task="task"
                     :team="currentTeam"
+                    :task-types="currentTaskTypes"
                     @ack-comment="onAckComment"
                     @duplicate-comment="onDuplicateComment"
                     @pin-comment="onPinComment"
@@ -316,6 +373,7 @@
         :is-error="errors.editComment"
         :comment-to-edit="commentToEdit"
         :team="currentTeam"
+        :task-types="currentTaskTypes"
         :fps="currentFps"
         :revision="currentRevision"
         @confirm="confirmEditTaskComment"
@@ -346,11 +404,19 @@
 </template>
 
 <script>
-import { CornerLeftUpIcon, ImageIcon } from 'lucide-vue-next'
+import {
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ChevronUpIcon,
+  CornerLeftUpIcon,
+  ImageIcon
+} from 'lucide-vue-next'
 import { mapGetters, mapActions } from 'vuex'
 
 import drafts from '@/lib/drafts'
 import { getTaskEntityPath, getTaskEntitiesPath } from '@/lib/path'
+import { getTaskTypePriorityOfProd } from '@/lib/productions'
 import { sortPeople } from '@/lib/sorting'
 
 import { formatListMixin } from '@/components/mixins/format'
@@ -363,6 +429,7 @@ import ComboboxStyled from '@/components/widgets/ComboboxStyled.vue'
 import DeleteModal from '@/components/modals/DeleteModal.vue'
 import EditCommentModal from '@/components/modals/EditCommentModal.vue'
 import EntityThumbnail from '@/components/widgets/EntityThumbnail.vue'
+import KitsuIcon from '@/components/widgets/KitsuIcon.vue'
 import PageSubtitle from '@/components/widgets/PageSubtitle.vue'
 import PeopleAvatar from '@/components/widgets/PeopleAvatar.vue'
 import Spinner from '@/components/widgets/Spinner.vue'
@@ -370,6 +437,13 @@ import SubscribeButton from '@/components/widgets/SubscribeButton.vue'
 import TaskTypeName from '@/components/widgets/TaskTypeName.vue'
 import ValidationTag from '@/components/widgets/ValidationTag.vue'
 import PreviewPlayer from '@/components/previews/PreviewPlayer.vue'
+import ViewPlaylistModal from '@/components/modals/ViewPlaylistModal.vue'
+
+import assetsStore from '@/store/modules/assets'
+import editsStore from '@/store/modules/edits'
+import episodesStore from '@/store/modules/episodes'
+import sequencesStore from '@/store/modules/sequences'
+import shotsStore from '@/store/modules/shots'
 
 export default {
   name: 'task',
@@ -379,12 +453,17 @@ export default {
   components: {
     AddComment,
     AddPreviewModal,
+    ChevronDownIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    ChevronUpIcon,
     ComboboxStyled,
     Comment,
     CornerLeftUpIcon,
     DeleteModal,
     EditCommentModal,
     EntityThumbnail,
+    KitsuIcon,
     ImageIcon,
     PageSubtitle,
     PeopleAvatar,
@@ -392,7 +471,8 @@ export default {
     Spinner,
     SubscribeButton,
     TaskTypeName,
-    ValidationTag
+    ValidationTag,
+    ViewPlaylistModal
   },
 
   provide() {
@@ -407,6 +487,7 @@ export default {
       previewForms: [],
       currentFrame: 0,
       currentTask: null,
+      hookupPlaylistTaskIds: [],
       selectedTab: 'validation',
       taskLoading: {
         isLoading: true,
@@ -417,7 +498,8 @@ export default {
         addExtraPreview: false,
         deleteExtraPreview: false,
         deleteComment: false,
-        editComment: false
+        editComment: false,
+        hookupPlaylist: false
       },
       loading: {
         addComment: false,
@@ -450,16 +532,16 @@ export default {
     this.clearSelectedTasks()
   },
 
-  mounted() {
-    this.loadTaskData().then(() => {
-      this.reset()
-    })
-    this.$nextTick(() => {
-      if (this.$refs['task-columns']) {
-        this.$refs['task-columns'].scrollTop = 100
-        window.scrollTo(0, 0)
-      }
-    })
+  async mounted() {
+    await this.loadTaskData()
+    await this.$nextTick()
+    await this[`load${this.currentType}s`]()
+    this.reset()
+    await this.$nextTick()
+    if (this.$refs['task-columns']) {
+      this.$refs['task-columns'].scrollTop = 100
+      window.scrollTo(0, 0)
+    }
   },
 
   computed: {
@@ -489,8 +571,37 @@ export default {
       'user'
     ]),
 
+    assetList() {
+      return assetsStore.cache.assets
+    },
+
+    editList() {
+      return editsStore.cache.edits
+    },
+
+    episodeList() {
+      return episodesStore.cache.episodes
+    },
+
+    sequenceList() {
+      return sequencesStore.cache.sequences
+    },
+
+    shotList() {
+      return shotsStore.cache.shots
+    },
+
     currentEntity() {
       return this.task && this.task.entity
+    },
+
+    currentType() {
+      const genericNames = ['Shot', 'Episode', 'Sequence', 'Edit']
+      if (genericNames.includes(this.task?.entity_type_name)) {
+        return this.task.entity_type_name
+      } else {
+        return 'Asset'
+      }
     },
 
     previewOptions() {
@@ -611,109 +722,109 @@ export default {
     },
 
     entityList() {
-      const hasEntity = this.displayedShots.some(
+      return this[`${this.currentType.toLowerCase()}List`]
+    },
+
+    /*
+     * Get the path to the previous task in the current entity.
+     */
+    previousEntityTaskPath() {
+      if (!this.task) return null
+      const entity = this.entityList.find(
         entity => entity.id === this.task.entity_id
       )
-      return hasEntity ? this.displayedShots : this.displayedAssets
+      if (!entity) return null
+      let tasks = entity.tasks || []
+      tasks = tasks.sort((a, b) => {
+        const taskA = this.taskMap.get(a)
+        const taskB = this.taskMap.get(b)
+        const taskTypeA = this.taskTypeMap.get(taskA?.task_type_id)
+        const taskTypeB = this.taskTypeMap.get(taskB?.task_type_id)
+        return (
+          getTaskTypePriorityOfProd(taskTypeA, this.currentProduction) -
+          getTaskTypePriorityOfProd(taskTypeB, this.currentProduction)
+        )
+      })
+      const tasksLength = tasks.length
+      const taskIndex = tasks.findIndex(taskId => taskId === this.task.id)
+      const previousTaskIndex = taskIndex - 1
+      const previousTaskId =
+        previousTaskIndex < 0
+          ? tasks[tasksLength - 1]
+          : tasks[previousTaskIndex]
+      return previousTaskId ? this.taskPath({ id: previousTaskId }) : null
     },
 
-    previousEntity() {
-      if (this.task) {
-        const taskTypeId = this.task.task_type_id
-        const entityIndex = this.entityList.findIndex(entity => {
-          return entity.id === this.task.entity_id
-        })
-        let firstTraversal = false
-
-        let previousEntityIndex = entityIndex - 1
-        if (previousEntityIndex < 0) {
-          previousEntityIndex = this.entityList.length - 1
-        }
-
-        let taskId = null
-        while (!taskId) {
-          if (this.entityList[previousEntityIndex]) {
-            const entity = this.entityList[previousEntityIndex]
-            taskId = entity.tasks.find(ctaskId => {
-              const task = this.taskMap.get(taskId)
-              if (task) {
-                return task.task_type_id === taskTypeId
-              } else {
-                return false
-              }
-            })
-          } else {
-            taskId = this.task.id
-          }
-
-          if (!taskId) {
-            previousEntityIndex--
-            if (previousEntityIndex < 0) {
-              previousEntityIndex = this.entityList.length
-              if (firstTraversal) {
-                return null
-              }
-              firstTraversal = true
-            }
-          }
-        }
-
-        return this.taskPath({ id: taskId })
-      } else {
-        return {
-          name: 'open-productions'
-        }
-      }
+    /*
+     * Get the path to the next task in the current entity.
+     */
+    nextEntityTaskPath() {
+      if (!this.task) return null
+      const entity = this.entityList.find(
+        entity => entity.id === this.task.entity_id
+      )
+      if (!entity) return null
+      let tasks = entity.tasks || []
+      tasks = tasks.sort((a, b) => {
+        const taskA = this.taskMap.get(a)
+        const taskB = this.taskMap.get(b)
+        const taskTypeA = this.taskTypeMap.get(taskA?.task_type_id)
+        const taskTypeB = this.taskTypeMap.get(taskB?.task_type_id)
+        return (
+          getTaskTypePriorityOfProd(taskTypeA, this.currentProduction) -
+          getTaskTypePriorityOfProd(taskTypeB, this.currentProduction)
+        )
+      })
+      const tasksLength = tasks.length
+      const taskIndex = tasks.findIndex(taskId => taskId === this.task.id)
+      const nextTaskIndex = taskIndex + 1
+      const nextTaskId =
+        nextTaskIndex >= tasksLength ? tasks[0] : tasks[nextTaskIndex]
+      return nextTaskId ? this.taskPath({ id: nextTaskId }) : null
     },
 
-    nextEntity() {
-      if (this.task) {
-        const taskTypeId = this.task.task_type_id
-        let firstTraversal = false
-        const entityIndex = this.entityList.findIndex(entity => {
-          return entity.id === this.task.entity_id
-        })
+    /*
+     * Get the path to the previous task. The previous task is the fist task
+     * found in the previous entities with the same task type.
+     */
+    previousTaskPath() {
+      if (!this.task) return null
 
-        let nextEntityIndex = entityIndex + 1
-        if (nextEntityIndex >= this.entityList.length) {
-          nextEntityIndex = 0
-        }
+      const entityIndex = this.getEntityIndex(this.task.entity_id)
+      if (entityIndex === -1) return null
 
-        let taskId = null
-        while (!taskId) {
-          if (this.entityList[nextEntityIndex]) {
-            const entity = this.entityList[nextEntityIndex]
-            taskId = entity.tasks.find(ctaskId => {
-              const task = this.taskMap.get(taskId)
-              if (task) {
-                return task.task_type_id === taskTypeId
-              } else {
-                return false
-              }
-            })
-          } else {
-            taskId = this.task.id
-          }
-
-          if (!taskId) {
-            nextEntityIndex++
-            if (nextEntityIndex >= this.entityList.length) {
-              nextEntityIndex = 0
-
-              if (firstTraversal) {
-                return null
-              }
-              firstTraversal = true
-            }
-          }
-        }
-
-        return this.taskPath({ id: taskId })
-      } else {
-        return {
-          name: 'open-productions'
+      let previousEntityIndex = this.getPreviousEntityIndex(entityIndex)
+      let taskId = null
+      while (!taskId && previousEntityIndex !== entityIndex) {
+        taskId = this.getTaskIdFromEntity(previousEntityIndex)
+        if (!taskId) {
+          previousEntityIndex = this.getPreviousEntityIndex(previousEntityIndex)
         }
       }
+
+      return taskId ? this.taskPath({ id: taskId }) : null
+    },
+
+    /*
+     * Get the path to the next task. The next task is the fist task
+     * found in the next entities with the same task type.
+     */
+    nextTaskPath() {
+      if (!this.task) return null
+
+      const entityIndex = this.getEntityIndex(this.task.entity_id)
+      if (entityIndex === -1) return null
+
+      let nextEntityIndex = this.getNextEntityIndex(entityIndex)
+      let taskId = null
+      while (!taskId && nextEntityIndex !== entityIndex) {
+        taskId = this.getTaskIdFromEntity(nextEntityIndex)
+        if (!taskId) {
+          nextEntityIndex = this.getNextEntityIndex(nextEntityIndex)
+        }
+      }
+
+      return taskId ? this.taskPath({ id: taskId }) : null
     },
 
     title() {
@@ -728,16 +839,7 @@ export default {
         }
         return `${entityName}`
       } else {
-        return 'Loading...'
-      }
-    },
-
-    windowTitle() {
-      if (this.task) {
-        const taskTypeName = this.task.task_type_name
-        return `${this.title} / ${taskTypeName}`
-      } else {
-        return 'Loading...'
+        return this.$t('main.loading')
       }
     },
 
@@ -784,16 +886,61 @@ export default {
       return this.user.departments.includes(this.taskType?.department_id)
     },
 
+    isHookupButtonVisible() {
+      return this.task?.entity_type_name === 'Shot'
+    },
+
     taskType() {
       return this.taskTypeMap.get(this.task?.task_type_id)
     },
 
     currentTeam() {
       return sortPeople(
-        this.currentProduction.team.map(personId =>
-          this.personMap.get(personId)
-        )
+        this.currentProduction?.team
+          .map(personId => this.personMap.get(personId))
+          .filter(Boolean) || []
       )
+    },
+
+    // get current task types for this project filtered by current task entity type (Shot or Asset)
+    currentTaskTypes() {
+      if (!this.task || !this.currentProduction) return []
+
+      // task types for this project
+      const task_types = this.currentProduction.task_types
+
+      // get the current task entity type eg. 'Shot' or 'Asset'
+      const current_task_type = this.taskTypeMap.get(this.task.task_type_id)
+      const task_type_entity = current_task_type.for_entity
+      const task_type_entity_slug = task_type_entity.toLowerCase() + 's'
+
+      // lets get a map of all tasks that are the same entity
+      // where the key is the task type id
+      const entity_tasks = {}
+      for (const keyValue of this.taskMap) {
+        const task = keyValue[1]
+        if (task.entity_id === this.task.entity_id)
+          entity_tasks[task.task_type_id] = task
+      }
+
+      const filtered = task_types
+        // get all task type objects
+        .map(taskTypeId => this.taskTypeMap.get(taskTypeId))
+
+        // filter down to just those that match this task entity type Shot, Asset etc.
+        .filter(taskType => taskType?.for_entity === task_type_entity)
+
+        // filter to tasks that exist
+        .filter(taskType => entity_tasks[taskType.id])
+
+        // add a url that points to the task
+        .map(taskType => {
+          const task = entity_tasks[taskType.id]
+          if (task)
+            taskType.url = `/productions/${task.project_id}/episodes/${task.episode_id || 'all'}/${task_type_entity_slug}/tasks/${task.id}`
+          return taskType
+        })
+      return filtered
     }
   },
 
@@ -808,15 +955,16 @@ export default {
       'changeCommentPreview',
       'clearSelectedTasks',
       'deleteAttachment',
-      'deleteTask',
       'deleteTaskPreview',
       'deleteTaskComment',
       'editTaskComment',
       'loadComment',
-      'loadEpisodes',
-      'loadTask',
-      'loadShots',
       'loadAssets',
+      'loadEdits',
+      'loadEpisodes',
+      'loadSequences',
+      'loadShots',
+      'loadTask',
       'loadPreviewFileFormData',
       'loadTaskComments',
       'refreshComment',
@@ -827,6 +975,30 @@ export default {
       'unsubscribeFromTask',
       'updatePreviewAnnotation'
     ]),
+
+    getPreviousEntityIndex(index) {
+      const result = index - 1
+      return result < 0 ? this.entityList.length - 1 : result
+    },
+
+    getNextEntityIndex(index) {
+      const result = index + 1
+      return result >= this.entityList.length ? 0 : result
+    },
+
+    getEntityIndex(entityId) {
+      return this.entityList.findIndex(entity => entity.id === entityId)
+    },
+
+    getTaskIdFromEntity(index) {
+      const taskTypeId = this.task.task_type_id
+      const entity = this.entityList[index]
+      if (!entity) return null
+      return entity.tasks.find(ctaskId => {
+        const task = this.taskMap.get(ctaskId)
+        return task && task.task_type_id === taskTypeId
+      })
+    },
 
     loadTaskData() {
       const task = this.getCurrentTask()
@@ -940,6 +1112,50 @@ export default {
           this.errors.addComment = !isRetakeError
           this.errors.addCommentMaxRetakes = isRetakeError
         })
+    },
+
+    hideHookupPlaylistModal() {
+      this.modals.hookupPlaylist = false
+    },
+
+    /*
+     * Create a playlist with the previous, current and next task within the
+     * same sequence
+     */
+    showHookupPlaylistModal() {
+      const currentTaskId = this.task.id
+      const tasks = Array.from(this.taskMap.values())
+        // get all tasks for this sequence
+        .filter(
+          task =>
+            task.episode_id === this.task.episode_id &&
+            task.sequence_name === this.task.sequence_name &&
+            task.task_type_id === this.task.task_type_id
+        )
+        // sort the tasks by shot name
+        .sort((a, b) =>
+          a.entity_name.localeCompare(b.entity_name, undefined, {
+            numeric: true
+          })
+        )
+
+      const currentTaskIndex = tasks.findIndex(
+        task => task.id === currentTaskId
+      )
+
+      const previousTaskId =
+        currentTaskIndex > 0 ? tasks[currentTaskIndex - 1].id : null
+
+      const nextTaskId =
+        currentTaskIndex < tasks.length - 1
+          ? tasks[currentTaskIndex + 1].id
+          : null
+
+      this.hookupPlaylistTaskIds = [currentTaskId]
+      if (previousTaskId) this.hookupPlaylistTaskIds.unshift(previousTaskId)
+      if (nextTaskId) this.hookupPlaylistTaskIds.push(nextTaskId)
+
+      this.modals.hookupPlaylist = true
     },
 
     reset({ keepPreviewFiles = false } = {}) {
@@ -1078,7 +1294,7 @@ export default {
       this.$refs['preview-player'].displayFirst()
       this.deleteTaskPreview({
         taskId: this.task.id,
-        commentId: comment.id,
+        commentId: comment?.id,
         previewId: this.currentExtraPreviewId
       })
         .then(() => {
@@ -1146,6 +1362,7 @@ export default {
         route = {
           name: section,
           params: {
+            type: this.currentType.toLowerCase() + 's',
             production_id: task.project_id,
             task_id: task.id
           }
@@ -1338,7 +1555,7 @@ export default {
     },
 
     selectedPreviewId() {
-      if (this.task) {
+      if (this.task && this.selectedPreviewId) {
         this.$router.push(this.previewPath(this.selectedPreviewId))
       }
     }
@@ -1471,7 +1688,7 @@ export default {
   },
 
   head() {
-    let title = 'Loading task... - Kitsu'
+    let title = `${this.$t('main.loading')} - Kitsu`
     if (this.task) {
       const taskTypeName = this.taskTypeMap.get(this.task.task_type_id).name
       title = `${this.title} / ${taskTypeName} - Kitsu`
@@ -1490,6 +1707,16 @@ export default {
   background: #46494f;
   border-color: $dark-grey;
   box-shadow: 0 0 6px #333;
+}
+
+.set-main-preview {
+  margin-right: 0;
+}
+
+.playlist-button {
+  img {
+    width: 20px;
+  }
 }
 
 h2.subtitle {

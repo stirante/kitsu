@@ -23,7 +23,6 @@
             :label="$t('main.production')"
             :production-list="productionList"
             v-model="productionId"
-            v-if="isActiveTab('board')"
           />
 
           <span class="filler"></span>
@@ -79,27 +78,27 @@
         <todos-list
           ref="done-list"
           class="done-list"
-          :tasks="sortedDoneTasks"
-          :is-loading="isTodosLoading"
+          done
+          :is-loading="loading.doneTasks || isTodosLoading"
           :is-error="isTodosLoadingError"
           :selection-grid="doneSelectionGrid"
-          :done="true"
+          :tasks="sortedDoneTasks"
           v-if="isActiveTab('done')"
         />
 
         <kanban-board
           :is-loading="isTodosLoading"
           :is-error="isTodosLoadingError"
+          :production="selectedProduction"
           :statuses="boardStatuses"
           :tasks="boardTasks"
           :user="user"
-          :production="selectedProduction"
           v-if="isActiveTab('board')"
         />
 
         <user-calendar
-          ref="user-calendar"
           :days-off="daysOff"
+          :is-loading="isTodosLoading"
           :tasks="sortedTasks"
           v-if="isActiveTab('calendar')"
         />
@@ -110,6 +109,7 @@
           :done-tasks="loggableDoneTasks"
           :is-loading="loading.timesheets || isTodosLoading"
           :is-error="isTodosLoadingError"
+          :days-off="daysOff"
           :day-off-error="dayOffError"
           :time-spent-map="timeSpentMap"
           :time-spent-total="timeSpentTotal"
@@ -142,7 +142,7 @@
 <script>
 import { mapGetters, mapActions } from 'vuex'
 import moment from 'moment-timezone'
-import firstBy from 'thenby'
+import { firstBy } from 'thenby'
 
 import { searchMixin } from '@/components/mixins/search'
 
@@ -192,6 +192,7 @@ export default {
         value: name
       })),
       loading: {
+        doneTasks: false,
         timesheets: false,
         savingSearch: false
       },
@@ -244,7 +245,6 @@ export default {
       'todoListScrollPosition',
       'todoSearchQueries',
       'todoSelectionGrid',
-      'todosSearchText',
       'user'
     ]),
 
@@ -253,13 +253,7 @@ export default {
     },
 
     boardTasks() {
-      const tasks = this.sortedTasks.concat(this.sortedDoneTasks)
-      if (this.selectedProduction) {
-        return tasks.filter(
-          task => task.project_id === this.selectedProduction.id
-        )
-      }
-      return tasks
+      return this.sortedTasks.concat(this.sortedDoneTasks)
     },
 
     boardStatuses() {
@@ -333,7 +327,7 @@ export default {
         },
         {
           label: `${this.$t('tasks.validated')} (${
-            this.sortedDoneTasks.length
+            this.loading.doneTasks ? '…' : this.sortedDoneTasks.length
           })`,
           name: 'done'
         },
@@ -369,19 +363,23 @@ export default {
     },
 
     sortedTasks() {
-      return this.sortTasks(
-        this.displayedTodos,
-        this.currentFilter,
-        this.currentSort
-      )
+      let tasksToSort = this.displayedTodos
+      if (this.productionId) {
+        tasksToSort = tasksToSort.filter(
+          task => task.project_id === this.productionId
+        )
+      }
+      return this.sortTasks(tasksToSort, this.currentFilter, this.currentSort)
     },
 
     sortedDoneTasks() {
-      return this.sortTasks(
-        this.displayedDoneTasks,
-        this.currentFilter,
-        this.currentSort
-      )
+      let tasksToSort = this.displayedDoneTasks
+      if (this.productionId) {
+        tasksToSort = tasksToSort.filter(
+          task => task.project_id === this.productionId
+        )
+      }
+      return this.sortTasks(tasksToSort, this.currentFilter, this.currentSort)
     }
   },
 
@@ -392,6 +390,7 @@ export default {
       'loadOpenProductions',
       'loadUserTimeSpents',
       'loadTodos',
+      'loadDoneTasks',
       'removeTodoSearch',
       'saveTodoSearch',
       'setDayOff',
@@ -406,9 +405,13 @@ export default {
     },
 
     async loadData(forced = false) {
+      this.loading.doneTasks = true
       await this.loadTodos({
         date: this.selectedDate,
         forced
+      })
+      this.loadDoneTasks().then(() => {
+        this.loading.doneTasks = false
       })
       this.$nextTick(() => {
         this.todoList?.setScrollPosition(this.todoListScrollPosition)
@@ -447,21 +450,21 @@ export default {
         ? currentSection
         : 'todos'
 
-      if (this.currentSection === 'board') {
-        const currentProduction = this.openProductions.find(
-          ({ id }) => id === this.$route.query.productionId
-        )
-        if (currentProduction) {
-          this.productionId = currentProduction.id
-        } else {
-          this.$router.push({
-            query: {
-              productionId: this.productionId,
-              section: this.currentSection
-            }
-          })
-        }
+      const currentProduction = this.openProductions.find(
+        ({ id }) => id === this.$route.query.productionId
+      )
+      if (currentProduction) {
+        this.productionId = currentProduction.id
+      } else {
+        this.$router.push({
+          query: {
+            ...this.$route.query,
+            productionId: this.productionId,
+            section: this.currentSection
+          }
+        })
       }
+
       this.clearSelectedTasks()
     },
 
@@ -513,7 +516,7 @@ export default {
       await this.loadData(true)
     },
 
-    async onUnsetDayOff(dayOff = null) {
+    async onUnsetDayOff(dayOff) {
       this.dayOffError = false
       try {
         await this.unsetDayOff(dayOff)
@@ -633,6 +636,7 @@ export default {
     productionId() {
       this.$router.push({
         query: {
+          ...this.$route.query,
           productionId: this.productionId,
           section: this.currentSection
         }
@@ -643,8 +647,8 @@ export default {
       this.updateActiveTab()
     },
 
-    '$route.query.search'() {
-      this.setSearchFromUrl()
+    '$route.query.search'(search) {
+      this.searchField?.setValue(search)
       this.onSearchChange()
     }
   },

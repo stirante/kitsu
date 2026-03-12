@@ -137,6 +137,27 @@ export default {
             {
               keys: ['Alt', '←'],
               text: this.$t('keyboard.plaltleft')
+            },
+            {
+              keys: ['Alt', 'o'],
+              text: this.$t('keyboard.plalto')
+            }
+          ]
+        },
+        {
+          label: 'keyboard.object_viewer',
+          shortcuts: [
+            {
+              keys: ['Ctrl', 'Mouse Left Click', 'Drag Horizontal'],
+              text: this.$t('keyboard.rotate_hdr')
+            },
+            {
+              keys: ['Mouse Middle Click', 'Drag Horizontal'],
+              text: this.$t('keyboard.rotate_hdr')
+            },
+            {
+              keys: ['Alt', 'Mouse Left Click', 'Drag Vertical'],
+              text: this.$t('keyboard.change_fov')
             }
           ]
         },

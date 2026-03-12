@@ -1,7 +1,7 @@
 <template>
   <div class="columns fixed-page">
     <div class="column main-column">
-      <div class="flexrow project-dates">
+      <div class="flexrow date-filters">
         <div class="flexrow-item">
           <label class="label">
             {{ $t('main.start_date') }}
@@ -28,28 +28,7 @@
           :options="zoomOptions"
           v-model="zoomLevel"
         />
-        <combobox-department
-          class="flexrow-item"
-          :label="$t('main.department')"
-          v-model="selectedDepartment"
-        />
-        <combobox-studio
-          class="flexrow-item"
-          :label="$t('main.studio')"
-          v-model="selectedStudio"
-        />
-        <div class="flexrow-item people-filter">
-          <label class="label">
-            {{ $t('main.person') }}
-          </label>
-          <people-field
-            ref="people-field"
-            :people="selectablePeople"
-            :placeholder="$t('team_schedule.person_placeholder')"
-            wide
-            v-model="selectedPerson"
-          />
-        </div>
+
         <div class="filler"></div>
         <div class="flexrow">
           <button-simple
@@ -64,6 +43,38 @@
             icon="list"
             :text="$t('tasks.unassigned_tasks')"
             @click="toggleTaskSidePanel"
+          />
+        </div>
+      </div>
+      <div class="flexrow filters">
+        <combobox-studio
+          class="flexrow-item"
+          all-studios-label
+          :label="$t('main.studio')"
+          v-model="selectedStudio"
+        />
+        <combobox-department
+          class="flexrow-item"
+          all-departments-label
+          :label="$t('main.department')"
+          v-model="selectedDepartment"
+        />
+        <combobox-production
+          class="flexrow-item"
+          :label="$t('main.production')"
+          :production-list="productionList"
+          v-model="selectedProduction"
+        />
+        <div class="flexrow-item people-filter">
+          <label class="label">
+            {{ $t('main.person') }}
+          </label>
+          <people-field
+            ref="people-field"
+            :people="selectablePeople"
+            :placeholder="$t('team_schedule.person_placeholder')"
+            wide
+            v-model="selectedPerson"
           />
         </div>
       </div>
@@ -242,6 +253,8 @@ import TaskTypeName from '@/components/widgets/TaskTypeName.vue'
 import TableInfo from '@/components/widgets/TableInfo.vue'
 import TaskInfo from '@/components/sides/TaskInfo.vue'
 
+export const DEFAULT_ZOOM = 1
+
 export default {
   name: 'team-schedule',
 
@@ -277,12 +290,13 @@ export default {
       selectedDepartment: null,
       selectedEndDate: null,
       selectedPerson: null,
+      selectedProduction: null,
       selectedStartDate: null,
       selectedStudio: null,
       startDate: moment(),
       unassignedTasks: [],
       totalUnassignedTasks: 0,
-      zoomLevel: 1,
+      zoomLevel: DEFAULT_ZOOM,
       zoomOptions: [
         { label: '1', value: 1 },
         { label: '2', value: 2 },
@@ -310,8 +324,11 @@ export default {
   mounted() {
     this.selectedDepartment = this.$route.query.department || undefined
     this.selectedStudio = this.$route.query.studio || undefined
-    const zoom = parseInt(this.$route.query.zoom) || 1
-    this.zoomLevel = Math.min(Math.max(zoom, 1), 4)
+    this.selectedProduction = this.$route.query.production || undefined
+    const zoom = Number(this.$route.query.zoom)
+    this.zoomLevel = this.zoomOptions.map(o => o.value).includes(zoom)
+      ? zoom
+      : DEFAULT_ZOOM
 
     this.init()
   },
@@ -351,6 +368,12 @@ export default {
         selectablePeople = selectablePeople.filter(
           person => person.studio_id === this.selectedStudio
         )
+      }
+      if (this.selectedProduction) {
+        selectablePeople = selectablePeople.filter(person => {
+          const production = this.productionMap.get(this.selectedProduction)
+          return production.team.includes(person.id)
+        })
       }
       return selectablePeople
     },
@@ -684,11 +707,14 @@ export default {
       this.$refs.schedule?.scrollToToday()
     },
 
-    updateRoute({ department, studio, zoom }) {
+    updateRoute({ department, production, studio, zoom }) {
       const query = { ...this.$route.query }
 
       if (department !== undefined) {
         query.department = department || undefined
+      }
+      if (production !== undefined) {
+        query.production = production || undefined
       }
       if (studio !== undefined) {
         query.studio = studio || undefined
@@ -730,6 +756,11 @@ export default {
       this.refreshSchedule()
     },
 
+    selectedProduction(value) {
+      this.updateRoute({ production: value })
+      this.refreshSchedule()
+    },
+
     zoomLevel(value) {
       this.updateRoute({ zoom: value })
     },
@@ -756,25 +787,27 @@ export default {
 @use 'sass:color';
 
 .dark {
-  .project-dates {
+  .filters {
     color: $white-grey;
     border-bottom: 1px solid $grey;
   }
 }
 
-.project-dates {
+.date-filters {
+  padding-bottom: 1em;
+  .field {
+    padding-bottom: 0;
+    margin-bottom: 0;
+  }
+}
+
+.filters {
   border-bottom: 1px solid #eee;
   padding-bottom: 1em;
 
   .field {
     padding-bottom: 0;
     margin-bottom: 0;
-  }
-
-  .overall-man-days {
-    width: 120px;
-    font-size: 0.9em;
-    margin-right: 1em;
   }
 }
 

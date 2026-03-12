@@ -1,4 +1,5 @@
 import moment from 'moment'
+
 import peopleApi from '@/store/api/people'
 import shotsApi from '@/store/api/shots'
 
@@ -39,6 +40,7 @@ import {
   LOAD_SHOTS_START,
   LOAD_SHOTS_ERROR,
   LOAD_SHOTS_END,
+  END_SHOTS_LOADING,
   SORT_VALIDATION_COLUMNS,
   SET_CURRENT_EPISODE,
   LOAD_SHOT_END,
@@ -76,12 +78,12 @@ import {
   CLEAR_SELECTED_SHOTS,
   SET_SHOT_SELECTION
 } from '@/store/mutation-types'
-import async from 'async'
 
 const cache = {
   shots: [],
   shotMap: new Map(),
-  shotIndex: []
+  shotIndex: {},
+  result: []
 }
 
 const helpers = {
@@ -218,7 +220,9 @@ const helpers = {
       taskMap
     }
   ) {
-    const taskTypes = Array.from(taskTypeMap.values())
+    const taskTypes = Array.from(taskTypeMap.values()).filter(
+      taskType => taskType.for_entity === 'Shot'
+    )
     const taskStatuses = Array.from(taskStatusMap.values())
 
     const query = shotSearch
@@ -399,6 +403,11 @@ const actions = {
     const isTVShow = rootGetters.isTVShow
     let episode = isTVShow ? rootGetters.currentEpisode : null
 
+    if (!production) {
+      if (callback) return callback()
+      return
+    }
+
     if (episode && ['all', 'main'].includes(episode.id)) {
       // If it's a wide episode, we just store it. There isn't anything to
       // load because we don't have episode defined.
@@ -431,19 +440,27 @@ const actions = {
         return shotsApi.getShots(production, episode)
       })
       .then(shots => {
-        const sequenceMap = sequenceStore.cache.sequenceMap
-        const taskMap = rootGetters.taskMap
-        commit(LOAD_SHOTS_END, {
-          production,
-          shots,
-          userFilters,
-          userFilterGroups,
-          taskTypeMap,
-          taskMap,
-          personMap,
-          sequenceMap,
-          episodeMap
-        })
+        if (
+          !isTVShow ||
+          shots.length === 0 ||
+          shots[0].episode_id === rootGetters.currentEpisode.id
+        ) {
+          const sequenceMap = sequenceStore.cache.sequenceMap
+          const taskMap = rootGetters.taskMap
+          commit(LOAD_SHOTS_END, {
+            production,
+            shots,
+            userFilters,
+            userFilterGroups,
+            taskTypeMap,
+            taskMap,
+            personMap,
+            sequenceMap,
+            episodeMap
+          })
+        } else {
+          commit(END_SHOTS_LOADING)
+        }
         if (callback) callback()
       })
       .catch(err => {
@@ -458,13 +475,16 @@ const actions = {
    * event. If the shot was updated a few times ago, it is not reloaded.
    */
   loadShot({ commit, state, rootGetters }, shotId) {
-    const shot = rootGetters.shotMap.get(shotId)
+    const shot = cache.shotMap.get(shotId)
     if (shot?.lock) return
 
     const personMap = rootGetters.personMap
     const production = rootGetters.currentProduction
     const taskMap = rootGetters.taskMap
     const taskTypeMap = rootGetters.taskTypeMap
+    const persons = rootGetters.people
+    const taskStatusMap = rootGetters.taskStatusMap
+
     return shotsApi
       .getShot(shotId)
       .then(shot => {
@@ -475,11 +495,13 @@ const actions = {
             commit(NEW_TASK_END, { task })
           })
           commit(ADD_SHOT, {
-            shot,
+            taskStatusMap,
             taskTypeMap,
             taskMap,
+            persons,
             personMap,
-            production
+            production,
+            shot
           })
         }
       })
@@ -500,7 +522,7 @@ const actions = {
       )
       return func
         .runPromiseAsSeries(createTaskPromises)
-        .then(() => Promise.resolve(shot))
+        .then(() => shot)
         .catch(console.error)
     })
   },
@@ -530,14 +552,13 @@ const actions = {
       } else {
         commit(REMOVE_SHOT, shot)
       }
-      return Promise.resolve()
     })
   },
 
   restoreShot({ commit, state }, shot) {
     return shotsApi.restoreShot(shot).then(shot => {
       commit(RESTORE_SHOT_END, shot)
-      return Promise.resolve(shot)
+      return shot
     })
   },
 
@@ -547,18 +568,19 @@ const actions = {
       .postCsv(production, state.shotsCsvFormData, toUpdate)
       .then(() => {
         commit(IMPORT_SHOTS_END)
-        return Promise.resolve()
       })
   },
 
   uploadEdlFile({ rootGetters }, { edl_file, namingConvention, matchCase }) {
     const production = rootGetters.currentProduction
     const episode = rootGetters.isTVShow ? rootGetters.currentEpisode : null
-    return shotsApi
-      .postEdl(production, edl_file, namingConvention, matchCase, episode)
-      .then(() => {
-        return Promise.resolve()
-      })
+    return shotsApi.postEdl(
+      production,
+      edl_file,
+      namingConvention,
+      matchCase,
+      episode
+    )
   },
 
   displayMoreShots({ commit, rootGetters }) {
@@ -648,8 +670,9 @@ const actions = {
     }
     const lines = shots.map(shot => {
       let shotLine = []
-      if (isTVShow)
-        shotLine.push(rootGetters.episodeMap.get(shot.episode_id).name)
+      if (isTVShow) {
+        shotLine.push(shot.episode_name)
+      }
       shotLine = shotLine.concat([
         shot.sequence_name,
         shot.name,
@@ -753,31 +776,19 @@ const actions = {
     commit(CLEAR_SELECTED_SHOTS)
   },
 
-  deleteSelectedShots({ state, dispatch }) {
-    return new Promise((resolve, reject) => {
-      let selectedShotIds = [...state.selectedShots.values()]
-        .filter(shot => !shot.canceled)
-        .map(shot => shot.id)
-      if (selectedShotIds.length === 0) {
-        selectedShotIds = [...state.selectedShots.keys()]
+  async deleteSelectedShots({ state, dispatch }) {
+    let selectedShotIds = [...state.selectedShots.values()]
+      .filter(shot => !shot.canceled)
+      .map(shot => shot.id)
+    if (selectedShotIds.length === 0) {
+      selectedShotIds = [...state.selectedShots.keys()]
+    }
+    for (const shotId of selectedShotIds) {
+      const shot = cache.shotMap.get(shotId)
+      if (shot) {
+        await dispatch('deleteShot', shot)
       }
-      async.eachSeries(
-        selectedShotIds,
-        (shotId, next) => {
-          const shot = cache.shotMap.get(shotId)
-          if (shot) {
-            dispatch('deleteShot', shot)
-          }
-          next()
-        },
-        err => {
-          if (err) reject(err)
-          else {
-            resolve()
-          }
-        }
-      )
-    })
+    }
   },
 
   async setNbFramesFromTaskTypePreviews(
@@ -955,6 +966,10 @@ const mutations = {
 
     state.shotSearchQueries = userFilters.shot?.[production.id] || []
     state.shotSearchFilterGroups = userFilterGroups?.shot?.[production.id] || []
+  },
+
+  [END_SHOTS_LOADING](state) {
+    state.isShotsLoading = false
   },
 
   [SAVE_SHOT_SEARCH_END](state, { searchQuery }) {
@@ -1264,7 +1279,18 @@ const mutations = {
     state.shotSelectionGrid = tmpGrid
   },
 
-  [ADD_SHOT](state, { taskTypeMap, taskMap, personMap, production, shot }) {
+  [ADD_SHOT](
+    state,
+    {
+      taskStatusMap,
+      taskTypeMap,
+      taskMap,
+      persons,
+      personMap,
+      production,
+      shot
+    }
+  ) {
     const taskIds = []
     const validations = new Map()
     let timeSpent = 0
@@ -1295,17 +1321,44 @@ const mutations = {
     cache.shots.push(shot)
     cache.shots = sortShots(cache.shots)
     cache.shotMap.set(shot.id, shot)
+    cache.shotIndex = buildShotIndex(cache.shots)
 
-    state.displayedShots.push(shot)
-    state.displayedShots = sortShots(state.displayedShots)
-    state.displayedShotsCount = cache.shots.length
-    state.displayedShotsLength = cache.shots.filter(s => !s.canceled).length
-    state.shotFilledColumns = getFilledColumns(state.displayedShots)
+    // Test the new shot only against existing filters
+    const taskTypes = Array.from(taskTypeMap.values())
+    const taskStatuses = Array.from(taskStatusMap.values())
+    const addedShotIndex = buildShotIndex(
+      [shot],
+      taskTypes,
+      taskStatuses,
+      production?.descriptors || [],
+      persons
+    )
+    const query = state.shotSearchText
+    const keywords = getKeyWords(query) || []
+    const filters = getFilters({
+      entryIndex: addedShotIndex,
+      assetTypes: [],
+      taskTypes,
+      taskStatuses,
+      descriptors: production?.descriptors || [],
+      persons,
+      query
+    })
+    let result = indexSearch(addedShotIndex, keywords)
+    result = applyFilters(result, filters, taskMap)
 
-    const maxX = state.displayedShots.length
-    const maxY = state.nbValidationColumns
-    state.shotSelectionGrid = buildSelectionGrid(maxX, maxY)
-    cache.shotMap.set(shot.id, shot)
+    if (result && result.length > 0) {
+      cache.result.push(shot)
+      state.displayedShots.push(shot)
+      state.displayedShots = sortShots(state.displayedShots)
+      state.displayedShotsCount = cache.shots.length
+      state.displayedShotsLength = cache.shots.filter(s => !s.canceled).length
+      state.shotFilledColumns = getFilledColumns(state.displayedShots)
+
+      const maxX = state.displayedShots.length
+      const maxY = state.nbValidationColumns
+      state.shotSelectionGrid = buildSelectionGrid(maxX, maxY)
+    }
   },
 
   [UPDATE_SHOT](state, shot) {

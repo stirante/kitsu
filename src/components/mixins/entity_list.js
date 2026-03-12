@@ -27,11 +27,16 @@ export const entityListMixin = {
     window.addEventListener('keyup', this.onKeyUp, false)
     this.stickedColumns =
       preferences.getObjectPreference(this.localStorageStickKey) || {}
+    if (this.domEvents) this.addEvents(this.domEvents)
   },
 
   beforeUnmount() {
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
+    if (this.domEvents) {
+      this.removeEvents(this.domEvents)
+      document.body.style.cursor = 'default'
+    }
   },
 
   data() {
@@ -211,22 +216,19 @@ export const entityListMixin = {
 
           for (let i = startX; i <= endX; i++) {
             for (let j = startY; j <= endY; j++) {
-              const ref = `validation-${i}-${j}`
-              const validationCell = this.$refs[ref][0]
-              if (!grid[i][j]) {
+              const validationCell = this.$refs[`validation-${i}-${j}`]?.[0]
+              const isSelectedCell = grid?.[i]?.[j]
+              if (validationCell?.selectable && !isSelectedCell) {
                 let y = validationCell.columnY
                 if (!sticked) y += columnOffset
 
-                // Add cell to selection
-                if (validationCell.selectable) {
-                  selection.push({
-                    entity: validationCell.entity,
-                    column: validationCell.column,
-                    task: validationCell.task,
-                    x: validationCell.rowX,
-                    y
-                  })
-                }
+                selection.push({
+                  entity: validationCell.entity,
+                  column: validationCell.column,
+                  task: validationCell.task,
+                  x: validationCell.rowX,
+                  y
+                })
               }
             }
           }
@@ -543,14 +545,28 @@ export const entityListMixin = {
             list = list.flat()
           }
           const x = list.findIndex(e => e.id === entity.id)
-          const y = this.displayedValidationColumns.indexOf(task.task_type_id)
-          this.$store.commit('ADD_SELECTED_TASK', {
-            task,
-            entity,
-            column: taskType,
-            x,
-            y
-          })
+          let y = this.stickedDisplayedValidationColumns.indexOf(
+            task.task_type_id
+          )
+          if (y === -1) {
+            const nonStickedIndex =
+              this.nonStickedDisplayedValidationColumns.indexOf(
+                task.task_type_id
+              )
+            if (nonStickedIndex > -1) {
+              y =
+                nonStickedIndex + this.stickedDisplayedValidationColumns.length
+            }
+          }
+          if (y > -1) {
+            this.$store.commit('ADD_SELECTED_TASK', {
+              task,
+              entity,
+              column: taskType,
+              x,
+              y
+            })
+          }
         }
       }
     },
@@ -614,6 +630,10 @@ export const entityListMixin = {
   watch: {
     nbSelectedTasks() {
       this.updateTaskInQuery()
+    },
+
+    'displaySettings.bigThumbnails'() {
+      this.updateOffsets()
     }
   }
 }

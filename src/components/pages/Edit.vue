@@ -46,6 +46,20 @@
             v-if="isValidRoomId(currentEdit) && currentPreview?.id"
           />
         </div>
+        <router-link
+          class="flexrow-item has-text-centered back-link ml1"
+          :to="previousEntityPath"
+          v-if="previousEntityPath && entityList.length > 1"
+        >
+          <chevron-left-icon />
+        </router-link>
+        <router-link
+          class="flexrow-item has-text-centered back-link"
+          :to="nextEntityPath"
+          v-if="nextEntityPath && entityList.length > 1"
+        >
+          <chevron-right-icon />
+        </router-link>
       </div>
 
       <div ref="container" class="edit player block">
@@ -106,7 +120,7 @@
               >
                 <download-icon class="icon" />
                 <span class="text">
-                  {{ $t('tasks.download_pdf_file', { extension: extension }) }}
+                  {{ $t('tasks.download_pdf_file', { extension }) }}
                 </span>
               </a>
             </p>
@@ -138,8 +152,12 @@
             <div
               class="canvas-wrapper"
               ref="canvas-wrapper"
-              oncontextmenu="return false;"
-              v-show="!isCurrentPreviewFile"
+              oncontextmenu="return false"
+              v-show="
+                !isCurrentPreviewFile &&
+                isAnnotationsDisplayed &&
+                !isCurrentPreviewModel
+              "
             >
               <canvas
                 id="edit-annotation-canvas"
@@ -192,14 +210,14 @@
             "
           >
             <button-simple
-              class="button player-button flexrow-item"
+              class="player-button flexrow-item"
               @click="playClicked"
               :title="$t('playlists.actions.play')"
               icon="play"
               v-if="!isPlaying"
             />
             <button-simple
-              class="button player-button flexrow-item"
+              class="player-button flexrow-item"
               @click="pauseClicked"
               :title="$t('playlists.actions.pause')"
               icon="pause"
@@ -225,20 +243,20 @@
             v-if="currentEntityPreviewLength > 1"
           >
             <button-simple
-              class="button player-button flexrow-item"
+              class="player-button flexrow-item"
               icon="left"
               :title="$t('playlists.actions.files_previous')"
               :disabled="isPlaying"
               @click="onPreviousPreviewClicked"
             />
             <span
-              class="ml05 mr05"
+              class="ml05 mr05 nowrap"
               :title="$t('playlists.actions.files_position')"
             >
               {{ currentPreviewIndex + 1 }} / {{ currentEntityPreviewLength }}
             </span>
             <button-simple
-              class="button player-button flexrow-item"
+              class="player-button flexrow-item"
               icon="right"
               :title="$t('playlists.actions.files_next')"
               :disabled="isPlaying"
@@ -255,27 +273,7 @@
           </div>
 
           <div class="flexrow flexrow-item" v-if="isCurrentPreviewMovie">
-            <button-simple
-              class="button player-button flexrow-item"
-              @click="onSpeedClicked"
-              :title="$t('playlists.actions.speed')"
-              text="x1.00"
-              v-if="speed === 3"
-            />
-            <button-simple
-              class="button player-button flexrow-item"
-              @click="onSpeedClicked"
-              :title="$t('playlists.actions.speed')"
-              text="x0.50"
-              v-else-if="speed === 2"
-            />
-            <button-simple
-              class="button player-button flexrow-item"
-              @click="onSpeedClicked"
-              :title="$t('playlists.actions.speed')"
-              text="x0.25"
-              v-else
-            />
+            <speed-button class="player-button flexrow-item" v-model="speed" />
 
             <button-simple
               class="flexrow-item player-button"
@@ -293,7 +291,7 @@
             />
 
             <button-simple
-              class="button player-button flexrow-item"
+              class="player-button flexrow-item"
               :active="isRepeating"
               :title="$t('playlists.actions.looping')"
               icon="repeat"
@@ -320,13 +318,13 @@
               ({{ currentFrame }} / {{ (nbFrames + '').padStart(3, '0') }})
             </span>
             <button-simple
-              class="button player-button flexrow-item"
+              class="player-button flexrow-item"
               @click="onPreviousFrameClicked"
               :title="$t('playlists.actions.previous_frame')"
               icon="left"
             />
             <button-simple
-              class="button player-button flexrow-item"
+              class="player-button flexrow-item"
               @click="onNextFrameClicked"
               :title="$t('playlists.actions.next_frame')"
               icon="right"
@@ -407,10 +405,17 @@
               :title="$t('playlists.actions.annotation_delete')"
               @click="onDeleteClicked"
             />
+            <button-simple
+              class="player-button flexrow-item"
+              :active="isAnnotationsDisplayed"
+              icon="pen"
+              :title="$t('playlists.actions.toggle_annotations')"
+              @click="isAnnotationsDisplayed = !isAnnotationsDisplayed"
+            />
           </div>
           <div class="separator"></div>
           <button-simple
-            class="button player-button flexrow-item"
+            class="player-button flexrow-item"
             :active="!isCommentsHidden"
             :title="$t('playlists.actions.comments')"
             @click="onCommentClicked"
@@ -427,7 +432,7 @@
           />
 
           <button-simple
-            class="button player-button flexrow-item"
+            class="player-button flexrow-item"
             :title="$t('playlists.actions.fullscreen')"
             @click="onFullscreenClicked"
             icon="maximize"
@@ -578,6 +583,8 @@
 import { mapGetters, mapActions } from 'vuex'
 import {
   ArrowUpRightIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CornerLeftUpIcon,
   DownloadIcon
 } from 'lucide-vue-next'
@@ -587,6 +594,7 @@ import editStore from '@/store/modules/edits'
 import { annotationMixin } from '@/components/mixins/annotation'
 import { domMixin } from '@/components/mixins/dom'
 import { entityMixin } from '@/components/mixins/entity'
+import { fullScreenMixin } from '@/components/mixins/fullscreen'
 import { getEntitiesPath } from '@/lib/path'
 import { formatListMixin } from '@/components/mixins/format'
 import { previewRoomMixin } from '@/components/mixins/previewRoom'
@@ -611,6 +619,7 @@ import PreviewRoom from '@/components/widgets/PreviewRoom.vue'
 import PreviewsPerTaskType from '@/components/previews/PreviewsPerTaskType.vue'
 import RawVideoPlayer from '@/components/pages/playlists/RawVideoPlayer.vue'
 import Schedule from '@/components/widgets/Schedule.vue'
+import SpeedButton from '@/components/widgets/SpeedButton.vue'
 import Spinner from '@/components/widgets/Spinner.vue'
 import SoundViewer from '@/components/previews/SoundViewer.vue'
 import TaskInfo from '@/components/sides/TaskInfo.vue'
@@ -624,6 +633,7 @@ export default {
     domMixin,
     entityMixin,
     formatListMixin,
+    fullScreenMixin,
     previewRoomMixin,
     playerMixin
   ],
@@ -631,6 +641,8 @@ export default {
   components: {
     ArrowUpRightIcon,
     ButtonSimple,
+    ChevronLeftIcon,
+    ChevronRightIcon,
     CornerLeftUpIcon,
     ColorPicker,
     ComboboxStyled,
@@ -651,6 +663,7 @@ export default {
     RawVideoPlayer,
     SoundViewer,
     Schedule,
+    SpeedButton,
     Spinner,
     TaskInfo,
     VideoProgress
@@ -661,6 +674,7 @@ export default {
       type: 'edit',
       currentEdit: null,
       currentSection: 'infos',
+      isAnnotationsDisplayed: true,
       isLoading: true,
       isError: false,
       movieDimensions: { width: 0, height: 0 },
@@ -689,22 +703,7 @@ export default {
   },
 
   mounted() {
-    this.resetData()
-    this.$options.scrubbing = false
-    this.isHd = Boolean(this.organisation.hd_by_default)
-    if (this.picturePlayer) {
-      this.picturePlayer.addEventListener('load', async () => {
-        const wasPlaying = this.isPlaying
-        await this.resetPictureCanvas()
-        this.isPlaying = wasPlaying
-      })
-    }
-    this.$nextTick(() => {
-      this.configureEvents()
-      this.setupFabricCanvas()
-      this.setPlayerSpeed(1)
-      this.onFrameUpdate(1)
-    })
+    this.init()
   },
 
   computed: {
@@ -730,7 +729,7 @@ export default {
           return `${this.currentEdit.name}`
         }
       } else {
-        return 'Loading...'
+        return this.$t('main.loading')
       }
     },
 
@@ -750,6 +749,25 @@ export default {
       'loadTaskEntityPreviewFiles',
       'updatePreviewAnnotation'
     ]),
+
+    init() {
+      this.resetData()
+      this.$options.scrubbing = false
+      this.isHd = Boolean(this.organisation.hd_by_default)
+      if (this.picturePlayer) {
+        this.picturePlayer.addEventListener('load', async () => {
+          const wasPlaying = this.isPlaying
+          await this.resetPictureCanvas()
+          this.isPlaying = wasPlaying
+        })
+      }
+      this.$nextTick(() => {
+        this.configureEvents()
+        this.setupFabricCanvas()
+        this.setPlayerSpeed(1)
+        this.onFrameUpdate(1)
+      })
+    },
 
     resetPreviewFileMap() {
       this.previewFileMap.clear()
@@ -866,6 +884,18 @@ export default {
       this.updateProgressBar()
     },
 
+    onPreviousPreviewClicked() {
+      const index = this.currentPreviewIndex - 1
+      this.currentPreviewIndex =
+        index < 0 ? this.currentEntityPreviewLength - 1 : index
+    },
+
+    onNextPreviewClicked() {
+      const index = this.currentPreviewIndex + 1
+      this.currentPreviewIndex =
+        index > this.currentEntityPreviewLength - 1 ? 0 : index
+    },
+
     onPreviewChanged(entity, previewFile) {
       this.pause()
       if (!previewFile) {
@@ -938,6 +968,14 @@ export default {
           }
         }
       )
+    },
+
+    resetPanZoom() {
+      if (this.isCurrentPreviewMovie) {
+        this.rawPlayer?.resetPanZoom()
+      } else if (this.isCurrentPreviewPicture) {
+        this.picturePlayer?.resetPanZoom()
+      }
     }
   },
 

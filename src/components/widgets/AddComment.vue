@@ -39,9 +39,11 @@
       </div>
 
       <at-ta
-        :members="atOptions"
+        :ats="['#', '@']"
+        :members="[...membersForAts['@'], ...membersForAts['#']]"
         name-key="full_name"
         :limit="2"
+        :filter-match="atOptionsFilter"
         @update:value="onAtTextChanged"
         v-if="mode === 'status' || showCommentArea"
       >
@@ -60,6 +62,16 @@
               &nbsp;
             </span>
             {{ item.full_name }}
+          </template>
+          <template v-else-if="item.isTaskType">
+            <task-type-name
+              :task-type="{
+                color: item.color,
+                name: item.full_name
+              }"
+              :is-link="false"
+              thin
+            />
           </template>
           <template v-else>
             <div class="flexrow">
@@ -213,6 +225,7 @@
         </div>
 
         <div class="flexrow button-row mt1">
+          <emoji-button @select="onSelectEmoji" v-if="mode === 'status'" />
           <button-simple
             :class="{
               'flexrow-item': true,
@@ -289,6 +302,13 @@
           />
         </div>
 
+        <toggle-button
+          class="mb05"
+          :label="$t('comments.add_frame_to_comment')"
+          v-model="isFrameAddition"
+          v-if="isCurrentUserClient && isMovie"
+        />
+
         <div class="error pull-right" v-if="isError">
           <em>{{ $t('comments.error') }}</em>
         </div>
@@ -342,6 +362,7 @@ import drafts from '@/lib/drafts'
 import { remove } from '@/lib/models'
 import { getDownloadAttachmentPath } from '@/lib/path'
 import { replaceTimeWithTimecode } from '@/lib/render'
+import preferences from '@/lib/preferences'
 import strings from '@/lib/string'
 
 import AddAttachmentModal from '@/components/modals/AddAttachmentModal.vue'
@@ -349,7 +370,10 @@ import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
 import Checklist from '@/components/widgets/Checklist.vue'
 import ComboboxStatus from '@/components/widgets/ComboboxStatus.vue'
 import ConfirmModal from '@/components/modals/ConfirmModal.vue'
+import EmojiButton from '@/components/widgets/EmojiButton.vue'
 import PeopleAvatar from '@/components/widgets/PeopleAvatar.vue'
+import TaskTypeName from '@/components/widgets/TaskTypeName.vue'
+import ToggleButton from '@/components/widgets/ToggleButton.vue'
 
 const REVISION_NUMBER_REGEX = /v(\d+)/gi
 
@@ -363,7 +387,10 @@ export default {
     Checklist,
     ConfirmModal,
     ComboboxStatus,
-    PeopleAvatar
+    EmojiButton,
+    PeopleAvatar,
+    TaskTypeName,
+    ToggleButton
   },
 
   emits: [
@@ -379,7 +406,8 @@ export default {
 
   data() {
     return {
-      atOptions: [],
+      isFrameAddition: false,
+      membersForAts: { '@': [], '#': [] },
       isDragging: false,
       errors: {
         addCommentAttachment: false
@@ -423,6 +451,10 @@ export default {
       type: Array,
       default: () => []
     },
+    taskTypes: {
+      type: Array,
+      default: () => []
+    },
     team: {
       type: Array,
       default: () => []
@@ -455,6 +487,14 @@ export default {
   },
 
   mounted() {
+    if (!this.isCurrentUserClient) {
+      this.isFrameAddition = false
+    } else {
+      this.isFrameAddition = preferences.getBoolPreference(
+        'comments:add-frame-when-posting',
+        false
+      )
+    }
     const production = this.productionMap.get(this.task.project_id)
     this.mode =
       production?.is_publish_default_for_artists && this.isCurrentUserArtist
@@ -479,6 +519,11 @@ export default {
         }
       })
     })
+    window.addEventListener('paste', this.onPaste, false)
+  },
+
+  beforeUnmount() {
+    window.removeEventListener('paste', this.onPaste, false)
   },
 
   computed: {
@@ -587,13 +632,13 @@ export default {
     isValidForm() {
       return Boolean(
         this.mode === 'status' ||
-          (this.mode === 'publish' &&
-            this.previewForms.length &&
-            (this.nextRevision === undefined ||
-              this.nextRevision > this.revision) &&
-            (!this.showLinkField ||
-              !this.link ||
-              this.$refs['input-link']?.checkValidity()))
+        (this.mode === 'publish' &&
+          this.previewForms.length &&
+          (this.nextRevision === undefined ||
+            this.nextRevision > this.revision) &&
+          (!this.showLinkField ||
+            !this.link ||
+            this.$refs['input-link']?.checkValidity()))
       )
     }
   },
@@ -635,6 +680,16 @@ export default {
         return
       }
 
+      if (this.isFrameAddition) {
+        text = '@frame \n\n' + text
+        text = replaceTimeWithTimecode(
+          text,
+          this.revision,
+          this.frame + 1,
+          this.fps
+        )
+      }
+
       this.$store.commit('CLEAR_UPLOAD_PROGRESS')
       if (this.mode === 'publish') {
         if (!this.showCommentArea) text = ''
@@ -643,7 +698,6 @@ export default {
       } else {
         checklist = checklist.filter(item => item.text.length)
       }
-      text = replaceTimeWithTimecode(text, this.revision, this.time, this.fps)
 
       revision = Number(revision)
       if (isNaN(revision) || revision < 1) {
@@ -758,6 +812,20 @@ export default {
       this.isDragging = false
     },
 
+    /*
+     * When a file is pasted in the comment area, it adds it to the attachments.
+     */
+    onPaste(event) {
+      if (this.modals.addCommentAttachment) return
+      if (this.$refs['comment-textarea'] !== document.activeElement) return
+      const files = event.clipboardData.files
+      if (files.length > 0) {
+        const form = new FormData()
+        form.append('file', files[0])
+        this.addCommentAttachment([form])
+      }
+    },
+
     onAddCommentAttachmentClicked() {
       this.modals.addCommentAttachment = true
     },
@@ -808,6 +876,15 @@ export default {
       ).filter(Boolean)
     },
 
+    atOptionsFilter(name, chunk, at, v) {
+      // filter the list by the given at symbol
+      const option_at = v?.isTaskType ? '#' : '@'
+      // @ for team, # for task type
+      if (at !== option_at) return false
+      // match at lower-case
+      return name?.toLowerCase().indexOf(chunk.toLowerCase()) > -1
+    },
+
     onAtTextChanged(input) {
       if (input.includes('@frame')) {
         this.text = replaceTimeWithTimecode(
@@ -829,6 +906,11 @@ export default {
 
     hideAnnotationLoading() {
       this.attachmentModal.hideAnnotationLoading()
+    },
+
+    onSelectEmoji(emoji) {
+      const textarea = this.$refs['comment-textarea']
+      this.text = strings.insertInTextArea(textarea, emoji.i)
     }
   },
 
@@ -856,6 +938,12 @@ export default {
       }
     },
 
+    isFrameAddition(value) {
+      if (this.isCurrentUserClient) {
+        preferences.setPreference('comments:add-frame-when-posting', value)
+      }
+    },
+
     previewForms: {
       deep: true,
       immediate: true,
@@ -867,34 +955,59 @@ export default {
       }
     },
 
+    taskTypes: {
+      deep: true,
+      immediate: true,
+      handler(values) {
+        const taskTypeOptions = values.map(taskType => {
+          return {
+            isTaskType: true,
+            full_name: taskType.name,
+            color: taskType.color,
+            id: taskType.id,
+            url: taskType.url
+          }
+        })
+        taskTypeOptions.push({
+          isTaskType: true,
+          color: '#000',
+          full_name: 'All'
+        })
+        this.membersForAts['#'] = taskTypeOptions
+      }
+    },
+
     team: {
       deep: true,
       immediate: true,
       handler() {
+        let teamOptions
         if (this.isCurrentUserClient) {
-          this.atOptions = [
-            ...this.team.filter(person =>
-              ['admin', 'manager', 'supervisor', 'client'].includes(person.role)
-            )
-          ]
+          teamOptions = this.team.filter(person =>
+            ['admin', 'manager', 'client'].includes(person.role)
+          )
         } else {
-          this.atOptions = [...this.team]
+          teamOptions = [...this.team]
         }
-        this.atOptions = this.atOptions.concat(
-          this.productionDepartmentIds.map(departmentId => {
-            const department = this.departmentMap.get(departmentId)
-            return {
-              isDepartment: true,
-              full_name: department.name,
-              color: department.color,
-              id: departmentId
-            }
-          })
-        )
-        this.atOptions.push({
+        if (!this.isCurrentUserClient) {
+          teamOptions = teamOptions.concat(
+            this.productionDepartmentIds.map(departmentId => {
+              const department = this.departmentMap.get(departmentId)
+              return {
+                isDepartment: true,
+                full_name: department.name,
+                color: department.color,
+                id: departmentId
+              }
+            })
+          )
+        }
+        teamOptions.push({
           isTime: true,
+          at: '@',
           full_name: 'frame'
         })
+        this.membersForAts['@'] = teamOptions
       }
     }
   }
@@ -1075,6 +1188,7 @@ article.add-comment {
 }
 
 .post-area {
+  position: relative;
   padding: 0 0.5em 0.2em 0.5em;
 }
 
@@ -1090,17 +1204,6 @@ article.add-comment {
   height: 5px;
   width: 100%;
   background-color: $light-green;
-}
-
-.button-row {
-  .button:hover {
-    transform: scale(1.2);
-    transition: transform 0.1s linear;
-
-    &.post-button:hover {
-      transform: none;
-    }
-  }
 }
 
 input[type='number']::-webkit-outer-spin-button,

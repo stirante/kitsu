@@ -1,5 +1,8 @@
 <template>
-  <div class="user-calendar mt1">
+  <div class="loading-wrapper" v-if="isLoading">
+    <spinner />
+  </div>
+  <div class="user-calendar mt1" v-else>
     <full-calendar
       ref="calendar"
       class="app-calendar"
@@ -63,11 +66,13 @@ import { BriefcaseIcon } from 'lucide-vue-next'
 import { mapActions, mapGetters } from 'vuex'
 
 import FullCalendar from '@fullcalendar/vue3'
+import allLocales from '@fullcalendar/core/locales-all'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import multiMonthPlugin from '@fullcalendar/multimonth'
 
 import EntityThumbnail from '@/components/widgets/EntityThumbnail.vue'
 import ProductionName from '@/components/widgets/ProductionName.vue'
+import Spinner from '@/components/widgets/Spinner.vue'
 
 export default {
   name: 'user-calendar',
@@ -76,7 +81,8 @@ export default {
     BriefcaseIcon,
     EntityThumbnail,
     FullCalendar,
-    ProductionName
+    ProductionName,
+    Spinner
   },
 
   props: {
@@ -87,6 +93,10 @@ export default {
     daysOff: {
       type: Array,
       default: () => []
+    },
+    isLoading: {
+      type: Boolean,
+      default: true
     }
   },
 
@@ -101,7 +111,9 @@ export default {
           right: 'dayGridMonth,dayGridWeek,multiMonthYear'
         },
         initialView: 'dayGridMonth',
-        firstDay: 1
+        firstDay: 1,
+        locales: allLocales,
+        locale: this.$i18n.locale_code ?? 'en'
       }
     }
   },

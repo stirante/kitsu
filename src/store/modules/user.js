@@ -37,7 +37,6 @@ import {
   USER_LOAD_DONE_TASKS_END,
   USER_LOAD_TIME_SPENTS_END,
   REGISTER_USER_TASKS,
-  PERSON_SET_DAY_OFF,
   SET_TODOS_SEARCH,
   LOAD_USER_FILTERS_END,
   LOAD_USER_FILTERS_ERROR,
@@ -72,6 +71,7 @@ import {
   LOAD_CUSTOM_ACTIONS_END,
   LOAD_STATUS_AUTOMATIONS_END,
   LOAD_ASSET_TYPES_END,
+  LOAD_PLUGINS_END,
   SET_NOTIFICATION_COUNT,
   LOAD_OPEN_PRODUCTIONS_END,
   RESET_ALL,
@@ -120,7 +120,9 @@ const initialState = {
   todoListScrollPosition: 0,
 
   timeSpentMap: {},
-  timeSpentTotal: 0
+  timeSpentTotal: 0,
+
+  plugins: []
 }
 
 const state = {
@@ -159,7 +161,13 @@ const getters = {
   todoListScrollPosition: state => state.todoListScrollPosition,
 
   timeSpentMap: state => state.timeSpentMap,
-  timeSpentTotal: state => state.timeSpentTotal
+  timeSpentTotal: state => state.timeSpentTotal,
+
+  plugins: state => state.plugins,
+  studioPlugins: state =>
+    state.plugins.filter(plugin => plugin.frontend_studio_enabled),
+  projectPlugins: state =>
+    state.plugins.filter(plugin => plugin.frontend_project_enabled)
 }
 
 const actions = {
@@ -177,25 +185,18 @@ const actions = {
       })
   },
 
-  checkNewPasswordValidityAndSave({ commit, state }, { form, callback }) {
-    if (auth.isPasswordValid(form.password, form.password2)) {
-      actions.changeUserPassword({ commit, state }, { form, callback })
-    } else {
+  async checkNewPasswordValidityAndSave({ commit }, { form }) {
+    if (!auth.isPasswordValid(form.password, form.password2)) {
       commit(USER_CHANGE_PASSWORD_UNVALID)
-      if (callback) callback()
+      return
     }
-  },
-
-  changeUserPassword({ commit }, payload) {
     commit(USER_CHANGE_PASSWORD_LOADING)
-    peopleApi.changePassword(payload.form, err => {
-      if (err) {
-        commit(USER_CHANGE_PASSWORD_ERROR)
-      } else {
-        commit(USER_CHANGE_PASSWORD_SUCCESS)
-      }
-      if (payload.callback) payload.callback()
-    })
+    try {
+      await peopleApi.changePassword(form)
+      commit(USER_CHANGE_PASSWORD_SUCCESS)
+    } catch (err) {
+      commit(USER_CHANGE_PASSWORD_ERROR)
+    }
   },
 
   preEnableTOTP({ state }) {
@@ -205,7 +206,7 @@ const actions = {
   enableTOTP({ commit }, totp) {
     return peopleApi.enableTOTP(totp).then(OTPRecoveryCodes => {
       commit(USER_ENABLE_TOTP_SUCCESS)
-      return Promise.resolve(OTPRecoveryCodes)
+      return OTPRecoveryCodes
     })
   },
 
@@ -214,7 +215,6 @@ const actions = {
       .disableTOTP(coerceTwoFactorPayload(twoFactorPayload))
       .then(() => {
         commit(USER_DISABLE_TOTP_SUCCESS)
-        return Promise.resolve()
       })
   },
 
@@ -225,7 +225,7 @@ const actions = {
   enableEmailOTP({ commit, state }, otp) {
     return peopleApi.enableEmailOTP(otp).then(OTPRecoveryCodes => {
       commit(USER_ENABLE_EMAIL_OTP_SUCCESS)
-      return Promise.resolve(OTPRecoveryCodes)
+      return OTPRecoveryCodes
     })
   },
 
@@ -238,14 +238,13 @@ const actions = {
       .disableEmailOTP(coerceTwoFactorPayload(twoFactorPayload))
       .then(() => {
         commit(USER_DISABLE_EMAIL_OTP_SUCCESS)
-        return Promise.resolve()
       })
   },
 
   preRegisterFIDO({ commit, state }) {
     return peopleApi
       .preRegisterFIDO()
-      .then(body => Promise.resolve(coercePublicKeyFromJSON(body)))
+      .then(body => coercePublicKeyFromJSON(body))
   },
 
   registerFIDO({ commit, state }, { registrationResponse, deviceName }) {
@@ -256,23 +255,19 @@ const actions = {
       )
       .then(OTPRecoveryCodes => {
         commit(USER_REGISTER_FIDO_SUCCESS, deviceName)
-        return Promise.resolve(OTPRecoveryCodes)
+        return OTPRecoveryCodes
       })
   },
 
   getFIDOChallenge({ commit, state }, email) {
     return peopleApi
       .getFIDOChallenge(email)
-      .then(body => Promise.resolve(coercePublicKeyFromJSON(body)))
+      .then(body => coercePublicKeyFromJSON(body))
   },
 
-  unregisterFIDO({ commit, state }, { twoFactorPayload, deviceName }) {
-    return peopleApi
-      .unregisterFIDO(coerceTwoFactorPayload(twoFactorPayload), deviceName)
-      .then(() => {
-        commit(USER_UNREGISTER_FIDO_SUCCESS, deviceName)
-        return Promise.resolve()
-      })
+  async unregisterFIDO({ commit }, { deviceName }) {
+    await peopleApi.unregisterFIDO(deviceName)
+    commit(USER_UNREGISTER_FIDO_SUCCESS, deviceName)
   },
 
   newRecoveryCodes({ commit, state }, twoFactorPayload) {
@@ -287,19 +282,23 @@ const actions = {
       commit(USER_LOAD_TODOS_START)
       try {
         const tasks = await peopleApi.loadTodos()
-        const doneTasks = await peopleApi.loadDone()
         const timeSpents = await peopleApi.loadTimeSpents(date)
-        const dayOff = await peopleApi.getDayOff(state.user.id, date)
         commit(USER_LOAD_TODOS_END, { tasks, userFilters, taskTypeMap })
-        commit(REGISTER_USER_TASKS, { tasks: tasks.concat(doneTasks) })
-        commit(USER_LOAD_DONE_TASKS_END, doneTasks)
+        commit(REGISTER_USER_TASKS, { tasks })
         commit(USER_LOAD_TIME_SPENTS_END, timeSpents)
-        commit(PERSON_SET_DAY_OFF, dayOff)
+        return tasks
       } catch (err) {
         console.error(err)
         commit(USER_LOAD_TODOS_ERROR)
       }
     }
+  },
+
+  async loadDoneTasks({ commit, state, rootGetters }) {
+    const doneTasks = await peopleApi.loadDone()
+    commit(USER_LOAD_DONE_TASKS_END, doneTasks)
+    commit(REGISTER_USER_TASKS, { tasks: doneTasks })
+    return doneTasks
   },
 
   async loadUserTimeSpents({ commit }, { date }) {
@@ -337,19 +336,15 @@ const actions = {
     commit(UPDATE_USER_FILTER, searchFilter)
   },
 
-  loadUserSearchFilters({ commit }, callback) {
-    peopleApi.getUserSearchFilters((err, searchFilters) => {
-      if (err) commit(LOAD_USER_FILTERS_ERROR)
-      else commit(LOAD_USER_FILTERS_END, searchFilters)
-      callback(err)
-    })
-    // return peopleApi.getUserSearchFilters()
-    // .then((searchFilters) => {
-    //   commit(LOAD_USER_FILTERS_END, searchFilters);
-    // })
-    // .catch((err) => {
-    //   commit(LOAD_USER_FILTERS_ERROR);
-    // })
+  async loadUserSearchFilters({ commit }) {
+    try {
+      const searchFilters = await peopleApi.getUserSearchFilters()
+      commit(LOAD_USER_FILTERS_END, searchFilters)
+      return searchFilters
+    } catch (err) {
+      commit(LOAD_USER_FILTERS_ERROR)
+      throw err
+    }
   },
 
   saveTodoSearch({ commit, rootGetters }, searchQuery) {
@@ -397,6 +392,7 @@ const actions = {
         commit(SET_CURRENT_PRODUCTION, rootGetters.currentProduction.id)
       }
       commit(LOAD_TASK_TYPES_END, context.task_types)
+      commit(LOAD_PLUGINS_END, context.plugins)
     })
   }
 }
@@ -829,6 +825,10 @@ const mutations = {
     }
   },
 
+  [LOAD_PLUGINS_END](state, plugins = []) {
+    state.plugins = plugins
+  },
+
   [CLEAR_AVATAR](state, userId) {
     if (state.user.id === userId) {
       state.user.has_avatar = false
@@ -844,7 +844,6 @@ const mutations = {
 }
 
 export default {
-  namespace: true,
   state,
   getters,
   actions,

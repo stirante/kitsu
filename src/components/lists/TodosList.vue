@@ -1,7 +1,7 @@
 <template>
   <div class="data-list task-list">
     <div class="datatable-wrapper" ref="body" @scroll.passive="onBodyScroll">
-      <table class="datatable">
+      <table class="datatable" v-if="!isLoading">
         <thead class="datatable-head">
           <tr>
             <th
@@ -149,7 +149,7 @@
                 type="number"
                 :value="formatDuration(entry.estimation, false)"
                 @change="updateEstimation($event.target.value)"
-                v-if="isCurrentUserManager && selectionGrid[entry.id]"
+                v-if="isEditable && selectionGrid[entry.id]"
               />
               <template v-else>
                 {{ formatDuration(entry.estimation) }}
@@ -170,7 +170,7 @@
                 :model-value="getDate(entry.start_date)"
                 :with-margin="false"
                 @update:model-value="updateStartDate"
-                v-if="isCurrentUserManager && selectionGrid[entry.id]"
+                v-if="isEditable && selectionGrid[entry.id]"
               />
               <template v-else>
                 {{ formatDate(entry.start_date) }}
@@ -183,7 +183,7 @@
                 :model-value="getDate(entry.due_date)"
                 :with-margin="false"
                 @update:model-value="updateDueDate"
-                v-if="isCurrentUserManager && selectionGrid[entry.id]"
+                v-if="isEditable && selectionGrid[entry.id]"
               />
               <template v-else>
                 {{ formatDate(entry.due_date) }}
@@ -290,20 +290,22 @@
     </div>
 
     <p class="has-text-centered footer-info" v-if="tasks.length && !isLoading">
-      {{ tasks.length }} {{ $tc('tasks.tasks', tasks.length) }} ({{
-        formatDuration(timeEstimated)
+      {{ tasks.length }}
+      {{ $tc('tasks.tasks', tasks.length) }}
+      ({{ formatDuration(timeSpent) }}
+      {{
+        isDurationInHours
+          ? $tc('main.hours_spent', formatDuration(timeSpent, false))
+          : $tc('main.days_spent', formatDuration(timeSpent, false))
       }}
+      /
+      {{ formatDuration(timeEstimated) }}
       {{
         isDurationInHours
-          ? $tc('main.hours_estimated', isTimeEstimatedPlural)
-          : $tc('main.days_estimated', isTimeEstimatedPlural)
-      }},
-      {{ formatDuration(timeSpent) }}
-      {{
-        isDurationInHours
-          ? $tc('main.hours_spent', isTimeSpentPlural)
-          : $tc('main.days_spent', isTimeSpentPlural)
-      }})
+          ? $tc('main.hours_estimated', formatDuration(timeEstimated, false))
+          : $tc('main.days_estimated', formatDuration(timeEstimated, false))
+      }}
+      )
     </p>
   </div>
 </template>
@@ -311,9 +313,10 @@
 <script>
 import { mapActions, mapGetters } from 'vuex'
 
-import { selectionListMixin } from '@/components/mixins/selection'
-import { formatListMixin } from '@/components/mixins/format'
+import { domMixin } from '@/components/mixins/dom'
 import { descriptorMixin } from '@/components/mixins/descriptors'
+import { formatListMixin } from '@/components/mixins/format'
+import { selectionListMixin } from '@/components/mixins/selection'
 
 import { sortPeople } from '@/lib/sorting'
 import {
@@ -341,7 +344,7 @@ import DateField from '@/components/widgets/DateField.vue'
 export default {
   name: 'todos-list',
 
-  mixins: [formatListMixin, selectionListMixin, descriptorMixin],
+  mixins: [domMixin, formatListMixin, selectionListMixin, descriptorMixin],
 
   components: {
     EntityThumbnail,
@@ -402,11 +405,13 @@ export default {
   mounted() {
     this.resizeHeaders()
     window.addEventListener('keydown', this.onKeyDown, false)
-    this.colTypePosX = this.$refs['th-prod'].offsetWidth + 'px'
-    this.colNamePosX =
-      this.$refs['th-prod'].offsetWidth +
-      this.$refs['th-type'].offsetWidth +
-      'px'
+    if (this.$refs['th-prod']) {
+      this.colTypePosX = this.$refs['th-prod'].offsetWidth + 'px'
+      this.colNamePosX =
+        this.$refs['th-prod'].offsetWidth +
+        this.$refs['th-type'].offsetWidth +
+        'px'
+    }
   },
 
   beforeUnmount() {
@@ -423,11 +428,16 @@ export default {
       'taskMap',
       'taskTypeMap',
       'user',
-      'isCurrentUserManager'
+      'isCurrentUserManager',
+      'isCurrentUserSupervisor'
     ]),
 
     displayedTasks() {
       return this.tasks
+    },
+
+    isEditable() {
+      return this.isCurrentUserManager || this.isCurrentUserSupervisor
     },
 
     isDescriptionPresent() {
@@ -468,29 +478,17 @@ export default {
       return this.displayedTasks.reduce((acc, task) => acc + task.duration, 0)
     },
 
-    isTimeSpentPlural() {
-      const divisor = this.isDurationInHours
-        ? 60
-        : 60 * this.organisation.hours_by_day
-      return Math.floor((this.timeSpent ? this.timeSpent : 0) / divisor) <= 1
-    },
-
     timeEstimated() {
       return this.displayedTasks.reduce((acc, task) => acc + task.estimation, 0)
     },
 
-    isTimeEstimatedPlural() {
-      const divisor = this.isDurationInHours
-        ? 60
-        : 60 * this.organisation.hours_by_day
-      return (
-        Math.floor((this.timeEstimated ? this.timeEstimated : 0) / divisor) <= 1
-      )
-    },
-
     isEpisodeVisible() {
       return this.displayedTasks.some(
-        task => task.source_id || task.episode_names?.length > 0
+        task =>
+          task.source_id ||
+          task.episode_names?.length > 0 ||
+          (!['Shot', 'Sequence', 'Edit'].includes(task.entity_type_name) &&
+            task.episode_id)
       )
     }
   },
@@ -604,11 +602,11 @@ export default {
       if (this.tasks.length > 0 && event.altKey) {
         let index = this.lastSelection ? this.lastSelection : 0
         if ([37, 38].includes(event.keyCode)) {
-          index = index - 1 < 0 ? (index = this.tasks.length - 1) : index - 1
+          index = index - 1 < 0 ? this.tasks.length - 1 : index - 1
           this.selectTask({}, index, this.tasks[index])
           this.pauseEvent(event)
         } else if ([39, 40].includes(event.keyCode)) {
-          index = index + 1 >= this.tasks.length ? (index = 0) : index + 1
+          index = index + 1 >= this.tasks.length ? 0 : index + 1
           this.selectTask({}, index, this.tasks[index])
           this.pauseEvent(event)
         }
@@ -753,12 +751,9 @@ export default {
 
     updateStartDate(date) {
       Object.keys(this.selectionGrid).forEach(taskId => {
-        let data = {
-          start_date: null,
-          due_date: null
-        }
         const task = this.taskMap.get(taskId)
         const dueDate = task.due_date ? parseSimpleDate(task.due_date) : null
+        let data
         if (date) {
           const startDate = moment(date)
           if (
@@ -775,7 +770,7 @@ export default {
         } else {
           data = {
             start_date: null,
-            due_date: dueDate
+            due_date: task.due_date
           }
         }
         if (this.isTaskChanged(task, data)) {
@@ -786,14 +781,11 @@ export default {
 
     updateDueDate(date) {
       Object.keys(this.selectionGrid).forEach(taskId => {
-        let data = {
-          start_date: null,
-          due_date: null
-        }
         const task = this.taskMap.get(taskId)
         const startDate = task.start_date
           ? parseSimpleDate(task.start_date)
           : null
+        let data
         if (date) {
           const dueDate = moment(date)
           if (
@@ -809,7 +801,7 @@ export default {
           )
         } else {
           data = {
-            start_date: startDate,
+            start_date: task.start_date,
             due_date: null
           }
         }
@@ -855,12 +847,10 @@ export default {
         }
       } else {
         this.selectionGrid = {}
-        let taskIndices = []
-        if (this.lastSelection > index) {
-          taskIndices = range(index, this.lastSelection)
-        } else {
-          taskIndices = range(this.lastSelection, index)
-        }
+        const taskIndices =
+          this.lastSelection > index
+            ? range(index, this.lastSelection)
+            : range(this.lastSelection, index)
         const selection = taskIndices.map(i => ({ task: this.tasks[i] }))
         selection.forEach(task => {
           this.selectionGrid[task.task.id] = true

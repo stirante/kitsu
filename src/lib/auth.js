@@ -1,12 +1,17 @@
 import superagent from 'superagent'
+
 import store from '@/store'
+import client from '@/store/api/client'
 import {
   DATA_LOADING_START,
+  DATA_LOADING_END,
   SET_ORGANISATION,
   USER_LOGIN,
   USER_LOGOUT,
   USER_LOGIN_FAIL
 } from '@/store/mutation-types.js'
+
+let channel
 
 const auth = {
   logIn(payload, callback) {
@@ -40,6 +45,15 @@ const auth = {
           callback(err)
         } else {
           if (res.body.login) {
+            if (res.body.two_factor_authentication_required) {
+              const user = res.body.user
+              store.commit(USER_LOGIN, user)
+              const err = new Error('Two-factor authentication required')
+              err.two_factor_authentication_required = true
+              callback(err)
+              return
+            }
+
             const user = res.body.user
             store.commit(DATA_LOADING_START)
             callback(null, user)
@@ -56,31 +70,23 @@ const auth = {
       await superagent.get('/api/auth/logout')
     } finally {
       store.commit(USER_LOGOUT)
+      this.postBroadcastMessage('logout')
     }
   },
 
   resetPassword(email) {
-    return new Promise((resolve, reject) => {
-      superagent
-        .post('/api/auth/reset-password')
-        .send({ email })
-        .end((err, res) => {
-          if (err) reject(err)
-          else resolve()
-        })
-    })
+    const data = { email }
+    return client.ppost('/api/auth/reset-password', data)
   },
 
   resetChangePassword(email, token, password, password2) {
-    return new Promise((resolve, reject) => {
-      superagent
-        .put('/api/auth/reset-password')
-        .send({ email, token, password, password2 })
-        .end((err, res) => {
-          if (err) reject(err)
-          else resolve()
-        })
-    })
+    const data = {
+      email,
+      token,
+      password,
+      password2
+    }
+    return client.pput('/api/auth/reset-password', data)
   },
 
   isServerLoggedIn(callback) {
@@ -109,15 +115,17 @@ const auth = {
   requireAuth(to, from, next) {
     const finalize = () => {
       if (!store.state.user.isAuthenticated) {
+        store.commit(DATA_LOADING_END)
         next({
           name: 'login',
           query: { redirect: to.fullPath }
         })
       } else {
-        store.commit(DATA_LOADING_START)
         next()
       }
     }
+
+    store.commit(DATA_LOADING_START)
 
     if (store.state.user.user === null) {
       auth.isServerLoggedIn(err => {
@@ -136,7 +144,19 @@ const auth = {
   },
 
   isPasswordValid(password, password2) {
-    return password.length > 6 && password === password2
+    return password.length >= 8 && password === password2
+  },
+
+  getBroadcastChannel() {
+    if (!channel && 'BroadcastChannel' in window) {
+      channel = new BroadcastChannel('auth')
+    }
+    return channel
+  },
+
+  postBroadcastMessage(message) {
+    const channel = this.getBroadcastChannel()
+    channel?.postMessage(message)
   }
 }
 export default auth

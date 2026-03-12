@@ -2,7 +2,7 @@
   <page-layout>
     <template #main>
       <div class="flexcolumn page">
-        <page-title class="mt1" text="Salary Scale" />
+        <page-title class="mt1" :text="$t('budget.salary_scale_title')" />
         <div class="has-text-centered" v-if="isLoading">
           <spinner />
         </div>
@@ -272,16 +272,16 @@ export default {
     },
 
     modifySalaryScale(departmentId, position, seniority, event) {
-      const value = event.target.value
+      const salary = Math.trunc(event.target.valueAsNumber || 0)
       const scaleEntry = this.salaryScale[departmentId][position][seniority]
-      scaleEntry.salary = parseInt(value)
+      scaleEntry.salary = salary
       this.updateSalaryScale(scaleEntry)
     }
   }
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 input[type='number']::-webkit-outer-spin-button,
 input[type='number']::-webkit-inner-spin-button {
   -webkit-appearance: none;

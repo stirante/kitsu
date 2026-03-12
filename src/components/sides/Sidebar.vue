@@ -131,6 +131,19 @@
               </router-link>
             </p>
           </div>
+          <div v-for="plugin in studioPlugins" :key="plugin.id">
+            <p @click="toggleSidebar()">
+              <router-link
+                :to="{
+                  name: 'plugin',
+                  params: { plugin_id: plugin.plugin_id }
+                }"
+              >
+                <icon :name="plugin.icon" />
+                {{ plugin.name }}
+              </router-link>
+            </p>
+          </div>
 
           <div v-if="isCurrentUserAdmin">
             <h2>{{ $t('main.admin') }}</h2>
@@ -171,6 +184,18 @@
               <router-link :to="{ name: 'salary-scale' }">
                 <rows-4-icon class="nav-icon" />
                 {{ $t('budget.salary_scale_title') }}
+              </router-link>
+            </p>
+            <p @click="toggleSidebar()">
+              <router-link :to="{ name: 'software-licenses' }">
+                <egg-icon class="nav-icon" />
+                {{ $t('software_licenses.title') }}
+              </router-link>
+            </p>
+            <p @click="toggleSidebar()">
+              <router-link :to="{ name: 'hardware-items' }">
+                <computer-icon class="nav-icon" />
+                {{ $t('hardware_items.title') }}
               </router-link>
             </p>
             <p @click="toggleSidebar()">
@@ -222,17 +247,31 @@
 </template>
 
 <script>
+import {
+  BotIcon,
+  BuildingIcon,
+  ComputerIcon,
+  EggIcon,
+  GlobeIcon,
+  Rows4Icon
+} from 'lucide-vue-next'
+import { defineAsyncComponent } from 'vue'
 import { mapGetters, mapActions } from 'vuex'
-import { BotIcon, BuildingIcon, GlobeIcon, Rows4Icon } from 'lucide-vue-next'
+
+const Icon = defineAsyncComponent(() => import('@/components/widgets/Icon.vue'))
 
 import KitsuIcon from '@/components/widgets/KitsuIcon.vue'
 
 export default {
   name: 'sidebar',
+
   components: {
     BotIcon,
     BuildingIcon,
+    ComputerIcon,
+    EggIcon,
     GlobeIcon,
+    Icon,
     KitsuIcon,
     Rows4Icon
   },
@@ -258,7 +297,8 @@ export default {
       'isCurrentUserVendor',
       'isSidebarHidden',
       'mainConfig',
-      'organisation'
+      'organisation',
+      'studioPlugins'
     ]),
 
     isLongLocale() {

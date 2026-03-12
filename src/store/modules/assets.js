@@ -2,18 +2,18 @@ import moment from 'moment'
 
 import assetsApi from '@/store/api/assets'
 import peopleApi from '@/store/api/people'
+
 import assetTypeStore from '@/store/modules/assettypes'
+import episodeStore from '@/store/modules/episodes'
+import peopleStore from '@/store/modules/people'
+import productionsStore from '@/store/modules/productions'
 import tasksStore from '@/store/modules/tasks'
 import taskStatusStore from '@/store/modules/taskstatus'
 import taskTypesStore from '@/store/modules/tasktypes'
-import productionsStore from '@/store/modules/productions'
-import peopleStore from '@/store/modules/people'
-
-import { getTaskTypePriorityOfProd } from '@/lib/productions'
-import { minutesToDays } from '@/lib/time'
 
 import func from '@/lib/func'
-
+import { getTaskTypePriorityOfProd } from '@/lib/productions'
+import { minutesToDays } from '@/lib/time'
 import { PAGE_SIZE } from '@/lib/pagination'
 import {
   sortAssetResult,
@@ -83,7 +83,6 @@ import {
   LOAD_SHARED_ASSETS_END,
   LOAD_UNSHARED_ASSETS_END
 } from '@/store/mutation-types'
-import async from 'async'
 
 const helpers = {
   getCurrentProduction() {
@@ -226,7 +225,9 @@ const helpers = {
     { assetSearch, production, sorting, taskStatusMap, taskTypeMap, persons }
   ) {
     const taskMap = tasksStore.state.taskMap
-    const taskTypes = Array.from(taskTypeMap.values())
+    const taskTypes = Array.from(taskTypeMap.values()).filter(
+      taskType => taskType.for_entity === 'Asset'
+    )
     const taskStatuses = Array.from(taskStatusMap.values())
     const query = assetSearch
     const keywords = getKeyWords(query) || []
@@ -486,6 +487,9 @@ const actions = {
     const production = rootGetters.currentProduction
     const taskMap = rootGetters.taskMap
     const taskTypeMap = rootGetters.taskTypeMap
+    const taskStatusMap = rootGetters.taskStatusMap
+    const persons = rootGetters.people
+
     return assetsApi
       .getAsset(assetId)
       .then(asset => {
@@ -497,13 +501,15 @@ const actions = {
           })
           commit(ADD_ASSET, {
             asset,
+            taskStatusMap,
             taskTypeMap,
             taskMap,
+            persons,
             personMap,
             production
           })
         }
-        return Promise.resolve(asset)
+        return asset
       })
       .catch(console.error)
   },
@@ -541,7 +547,7 @@ const actions = {
       })
       return func
         .runPromiseAsSeries(createTaskPromises)
-        .then(() => Promise.resolve(asset))
+        .then(() => asset)
         .catch(console.error)
     })
   },
@@ -577,14 +583,14 @@ const actions = {
       } else {
         commit(REMOVE_ASSET, asset)
       }
-      return Promise.resolve(asset)
+      return asset
     })
   },
 
   restoreAsset({ commit, state }, asset) {
     return assetsApi.restoreAsset(asset).then(() => {
       commit(RESTORE_ASSET_END, asset)
-      return Promise.resolve(asset)
+      return asset
     })
   },
 
@@ -603,7 +609,6 @@ const actions = {
       .postCsv(production, state.assetsCsvFormData, toUpdate)
       .then(() => {
         commit(IMPORT_ASSETS_END)
-        Promise.resolve()
       })
   },
 
@@ -691,7 +696,6 @@ const actions = {
     dispatch('setLastProductionScreen', 'production-asset-types')
     return dispatch('loadAssets').then(() => {
       dispatch('computeAssetTypeStats')
-      return Promise.resolve()
     })
   },
 
@@ -711,7 +715,7 @@ const actions = {
 
   getAssetsCsvLines({ state, rootGetters }) {
     const production = rootGetters.currentProduction
-    const episodeMap = rootGetters.episodeMap
+    const episodeMap = episodeStore.cache.episodeMap
     const organisation = rootGetters.organisation
     const personMap = rootGetters.personMap
     const taskTypeMap = rootGetters.taskTypeMap
@@ -750,6 +754,7 @@ const actions = {
       if (state.isAssetEstimation) {
         assetLine.push(minutesToDays(organisation, asset.estimation).toFixed(2))
       }
+      if (state.isAssetResolution) assetLine.push(asset.data.resolution)
       state.assetValidationColumns.forEach(validationColumn => {
         const task = rootGetters.taskMap.get(
           asset.validations.get(validationColumn)
@@ -804,31 +809,19 @@ const actions = {
     commit(CLEAR_SELECTED_ASSETS)
   },
 
-  deleteSelectedAssets({ state, dispatch }) {
-    return new Promise((resolve, reject) => {
-      let selectedAssetIds = [...state.selectedAssets.values()]
-        .filter(asset => !asset.canceled)
-        .map(asset => asset.id)
-      if (selectedAssetIds.length === 0) {
-        selectedAssetIds = [...state.selectedAssets.keys()]
+  async deleteSelectedAssets({ state, dispatch }) {
+    let selectedAssetIds = [...state.selectedAssets.values()]
+      .filter(asset => !asset.canceled)
+      .map(asset => asset.id)
+    if (selectedAssetIds.length === 0) {
+      selectedAssetIds = [...state.selectedAssets.keys()]
+    }
+    for (const assetId of selectedAssetIds) {
+      const asset = cache.assetMap.get(assetId)
+      if (asset) {
+        await dispatch('deleteAsset', asset)
       }
-      async.eachSeries(
-        selectedAssetIds,
-        (assetId, next) => {
-          const asset = cache.assetMap.get(assetId)
-          if (asset) {
-            dispatch('deleteAsset', asset)
-          }
-          next()
-        },
-        err => {
-          if (err) reject(err)
-          else {
-            resolve()
-          }
-        }
-      )
-    })
+    }
   },
 
   async loadSharedAssets({ commit, rootGetters }, { production }) {
@@ -1027,7 +1020,18 @@ const mutations = {
     state.unsharedAssets = assets
   },
 
-  [ADD_ASSET](state, { taskTypeMap, taskMap, personMap, production, asset }) {
+  [ADD_ASSET](
+    state,
+    {
+      taskStatusMap,
+      taskTypeMap,
+      taskMap,
+      persons,
+      personMap,
+      production,
+      asset
+    }
+  ) {
     asset.tasks = sortTasks(asset.tasks, taskTypeMap)
     asset.validations = new Map()
     asset.production_id = asset.project_id
@@ -1043,22 +1047,50 @@ const mutations = {
     )
     cache.assets.push(asset)
     cache.assets = sortAssets(cache.assets)
-
-    state.displayedAssets.push(asset)
-    state.displayedAssets = sortAssets(state.displayedAssets)
-    helpers.setListStats(state, cache.assets)
-    state.assetFilledColumns = getFilledColumns(state.displayedAssets)
-
-    const maxX = state.displayedAssets.length
-    const maxY = state.nbValidationColumns
-    state.assetSelectionGrid = buildSelectionGrid(maxX, maxY)
     cache.assetMap.set(asset.id, asset)
-
     cache.assetIndex = buildAssetIndex(cache.assets)
+
+    // Test the new asset only against existing filters
+    const taskTypes = Array.from(taskTypeMap.values())
+    const taskStatuses = Array.from(taskStatusMap.values())
+    const addedAssetIndex = buildAssetIndex(
+      [asset],
+      taskTypes,
+      taskStatuses,
+      production?.descriptors || [],
+      persons
+    )
+    const query = state.assetSearchText
+    const keywords = getKeyWords(query) || []
+    const filters = getFilters({
+      entryIndex: addedAssetIndex,
+      assetTypes: [],
+      taskTypes,
+      taskStatuses,
+      descriptors: production?.descriptors || [],
+      persons,
+      query
+    })
+    let result = indexSearch(addedAssetIndex, keywords)
+    result = applyFilters(result, filters, taskMap)
+
+    if (result && result.length > 0) {
+      state.displayedAssets.push(asset)
+      state.displayedAssets = sortAssets(state.displayedAssets)
+      helpers.setListStats(state, cache.assets)
+      state.assetFilledColumns = getFilledColumns(state.displayedAssets)
+
+      const maxX = state.displayedAssets.length
+      const maxY = state.nbValidationColumns
+      state.assetSelectionGrid = buildSelectionGrid(maxX, maxY)
+    }
   },
 
   [UPDATE_ASSET](state, asset) {
     Object.assign(cache.assetMap.get(asset.id), asset)
+    const cachedAsset = state.displayedAssets.find(a => a.id === asset.id)
+    Object.assign(cachedAsset, asset)
+    state.displayedAssets = [...state.displayedAssets]
     cache.assetIndex = buildAssetIndex(cache.assets)
   },
 

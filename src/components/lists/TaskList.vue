@@ -3,6 +3,9 @@
     <div
       ref="body"
       class="datatable-wrapper"
+      :class="{
+        'with-schedule': withSchedule
+      }"
       @scroll.passive="onBodyScroll"
       v-if="!isContactSheet"
     >
@@ -59,31 +62,31 @@
             <th class="retake-count number-cell" ref="th-retake-count">
               {{ $t('tasks.fields.retake_count') }}
             </th>
-            <th class="start-date" ref="th-estimation">
+            <th class="start-date" ref="th-estimation" v-if="!withSchedule">
               {{ $t('tasks.fields.start_date') }}
             </th>
-            <th class="due-date" ref="th-estimation">
+            <th class="due-date" ref="th-estimation" v-if="!withSchedule">
               {{ $t('tasks.fields.due_date') }}
             </th>
-            <th class="real-start-date" ref="th-status">
+            <th class="real-start-date" ref="th-status" v-if="!withSchedule">
               {{ $t('tasks.fields.real_start_date') }}
             </th>
-            <th class="real-end-date" ref="th-status">
+            <th class="real-end-date" ref="th-status" v-if="!withSchedule">
               {{ $t('tasks.fields.real_end_date') }}
             </th>
-            <th class="done-date" ref="th-status">
+            <th class="done-date" ref="th-status" v-if="!withSchedule">
               {{ $t('tasks.fields.done_date') }}
             </th>
-            <th class="last-comment-date" ref="th-status">
+            <th class="last-comment-date" ref="th-status" v-if="!withSchedule">
               {{ $t('tasks.fields.last_comment_date') }}
             </th>
-            <th class="empty" ref="">&nbsp;</th>
+            <th class="empty" v-if="!withSchedule">&nbsp;</th>
           </tr>
         </thead>
 
         <tbody class="datatable-body">
           <tr
-            :ref="'task-' + task.id"
+            :ref="`task-${task.id}`"
             :key="task.id"
             :class="{
               'task-line': true,
@@ -111,7 +114,12 @@
               {{ getEntity(task.entity.id).sequence_name }}
             </td>
             <td class="name">
-              {{ getEntity(task.entity.id).name }}
+              <div
+                class="ellipsis nowrap"
+                :title="getEntity(task.entity.id).name"
+              >
+                {{ getEntity(task.entity.id).name }}
+              </div>
             </td>
             <validation-cell
               class="status unselectable"
@@ -125,7 +133,7 @@
               <div class="flexrow">
                 <people-avatar-with-menu
                   class="flexrow-item"
-                  :key="task.id + '-' + personId"
+                  :key="`${task.id}-${personId}`"
                   :person="personMap.get(personId)"
                   :size="30"
                   :font-size="16"
@@ -146,7 +154,7 @@
                 min="0"
                 step="1"
                 type="number"
-                :ref="task.id + '-drawings'"
+                :ref="`${task.id}-drawings`"
                 :value="task.nb_drawings"
                 @change="updateNbDrawings($event.target.value)"
                 v-if="isInDepartment(task) && selectionGrid[task.id]"
@@ -169,7 +177,7 @@
                 <span
                   class="difficulty number-cell"
                   v-for="index in task.difficulty"
-                  :key="task.id + 'difficulty' + index"
+                  :key="`${task.id}-difficulty-${index}`"
                 >
                   &bull;
                 </span>
@@ -181,7 +189,7 @@
                 min="0"
                 step="any"
                 type="number"
-                :ref="task.id + '-estimation'"
+                :ref="`${task.id}-estimation`"
                 :value="formatDuration(task.estimation, false)"
                 @change="updateEstimation($event.target.value)"
                 v-if="isInDepartment(task) && selectionGrid[task.id]"
@@ -204,7 +212,7 @@
                 &bull;
               </template>
             </td>
-            <td class="start-date">
+            <td class="start-date" v-if="!withSchedule">
               <date-field
                 class="flexrow-item"
                 :with-margin="false"
@@ -217,7 +225,7 @@
                 {{ formatDate(task.start_date) }}
               </template>
             </td>
-            <td class="due-date">
+            <td class="due-date" v-if="!withSchedule">
               <date-field
                 class="flexrow-item"
                 :with-margin="false"
@@ -230,19 +238,19 @@
                 {{ formatDate(task.due_date) }}
               </template>
             </td>
-            <td class="real-start-date">
+            <td class="real-start-date" v-if="!withSchedule">
               {{ formatDate(task.real_start_date) }}
             </td>
-            <td class="real-end-date">
+            <td class="real-end-date" v-if="!withSchedule">
               {{ formatDate(task.end_date) }}
             </td>
-            <td class="done-date">
+            <td class="done-date" v-if="!withSchedule">
               {{ formatDate(task.done_date) }}
             </td>
-            <td class="last-comment-date">
+            <td class="last-comment-date" v-if="!withSchedule">
               {{ formatDate(task.last_comment_date) }}
             </td>
-            <td></td>
+            <td v-if="!withSchedule"></td>
           </tr>
         </tbody>
       </table>
@@ -252,7 +260,7 @@
       class="list-wrapper"
       v-else-if="tasksByParent && tasksByParent.length > 0 && isGrouped"
     >
-      <div :key="'task-section-' + i" v-for="(taskGroup, i) in tasksByParent">
+      <div :key="`task-section-${i}`" v-for="(taskGroup, i) in tasksByParent">
         <h2>
           {{ taskGroup.name }}
         </h2>
@@ -285,7 +293,7 @@
               <div class="filler"></div>
               <people-avatar-with-menu
                 class="flexrow-item"
-                :key="task.id + '-' + personId"
+                :key="`${task.id}-${personId}`"
                 :person="personMap.get(personId)"
                 :size="20"
                 :font-size="10"
@@ -326,7 +334,7 @@
           <div class="filler"></div>
           <people-avatar-with-menu
             class="flexrow-item"
-            :key="task.id + '-' + personId"
+            :key="`${task.id}-${personId}`"
             :person="personMap.get(personId)"
             :size="20"
             :font-size="10"
@@ -336,8 +344,9 @@
         </div>
       </div>
     </div>
-    <task-list-numbers :is-shots="isShots" :tasks="tasks" v-if="!isLoading" />
+    <slot></slot>
   </div>
+  <task-list-numbers :is-shots="isShots" :tasks="tasks" v-if="!isLoading" />
 </template>
 
 <script>
@@ -388,7 +397,7 @@ export default {
     ValidationTag
   },
 
-  emits: ['task-selected'],
+  emits: ['scroll', 'task-selected'],
 
   data() {
     return {
@@ -434,6 +443,10 @@ export default {
     tasks: {
       type: Array,
       default: () => []
+    },
+    withSchedule: {
+      type: Boolean,
+      default: false
     }
   },
 
@@ -609,13 +622,9 @@ export default {
 
     updateStartDate(date) {
       Object.keys(this.selectionGrid).forEach(taskId => {
-        let data = {
-          start_date: null,
-          due_date: null,
-          difficulty: null
-        }
         const task = this.taskMap.get(taskId)
         const dueDate = task.due_date ? parseSimpleDate(task.due_date) : null
+        let data
         if (date) {
           const startDate = moment(date)
           if (
@@ -632,7 +641,7 @@ export default {
         } else {
           data = {
             start_date: null,
-            due_date: dueDate
+            due_date: task.due_date
           }
         }
         if (task.difficulty) {
@@ -646,14 +655,11 @@ export default {
 
     updateDueDate(date) {
       Object.keys(this.selectionGrid).forEach(taskId => {
-        let data = {
-          start_date: null,
-          due_date: null
-        }
         const task = this.taskMap.get(taskId)
         const startDate = task.start_date
           ? parseSimpleDate(task.start_date)
           : null
+        let data
         if (date) {
           const dueDate = moment(date)
           if (
@@ -669,7 +675,7 @@ export default {
           )
         } else {
           data = {
-            start_date: startDate,
+            start_date: task.start_date,
             due_date: null
           }
         }
@@ -738,6 +744,8 @@ export default {
       if (maxHeight < position.scrollTop + 100) {
         this.page++
       }
+
+      this.$emit('scroll', { top: position.scrollTop })
     },
 
     getEntity(entityId) {
@@ -748,11 +756,11 @@ export default {
       if (this.tasks.length > 0 && event.altKey) {
         let index = this.lastSelection ? this.lastSelection : 0
         if ([37, 38].includes(event.keyCode)) {
-          index = index - 1 < 0 ? (index = this.tasks.length - 1) : index - 1
+          index = index - 1 < 0 ? this.tasks.length - 1 : index - 1
           this.selectTask({}, index, this.tasks[index])
           this.pauseEvent(event)
         } else if ([39, 40].includes(event.keyCode)) {
-          index = index + 1 >= this.tasks.length ? (index = 0) : index + 1
+          index = index + 1 >= this.tasks.length ? 0 : index + 1
           this.selectTask({}, index, this.tasks[index])
           this.pauseEvent(event)
         }
@@ -799,12 +807,10 @@ export default {
         }
       } else {
         this.selectionGrid = {}
-        let taskIndices = []
-        if (this.lastSelection > index) {
-          taskIndices = range(index, this.lastSelection)
-        } else {
-          taskIndices = range(this.lastSelection, index)
-        }
+        const taskIndices =
+          this.lastSelection > index
+            ? range(index, this.lastSelection)
+            : range(this.lastSelection, index)
         const selection = taskIndices.map(i => ({ task: this.tasks[i] }))
         selection.forEach(task => {
           this.selectionGrid[task.task.id] = true
@@ -814,9 +820,9 @@ export default {
       this.scrollToLine(task.id)
     },
 
-    setScrollPosition(scrollPosition) {
+    setScrollPosition(top) {
       if (this.$refs.body) {
-        this.$refs.body.scrollTop = scrollPosition
+        this.$refs.body.scrollTop = top
       }
     },
 
@@ -939,7 +945,7 @@ export default {
 }
 </script>
 
-<style scoped lang="scss">
+<style lang="scss" scoped>
 .thumbnail {
   min-width: 63px;
   max-width: 63px;
@@ -958,7 +964,7 @@ export default {
 
 .name {
   min-width: 120px;
-  width: 120px;
+  max-width: 300px;
   font-weight: bold;
 }
 
@@ -1020,6 +1026,7 @@ td.retake-count {
   font-weight: bold;
   font-size: 1.6em;
   padding-left: 2px;
+  white-space: nowrap;
 }
 
 .empty {
@@ -1061,12 +1068,32 @@ td.retake-count {
   padding: 0.5em;
 }
 
-.datatable-wrapper {
-  min-height: calc(100% - 50px);
+.data-list {
+  display: flex;
+  flex-direction: row;
+  margin-top: 0.6em;
+  min-height: 150px;
+  max-height: fit-content;
 }
 
-.data-list {
-  margin-top: 0.6em;
+.datatable-wrapper {
+  min-height: calc(100% - 50px);
+  transition: margin-top 0.3s ease;
+
+  &.with-schedule {
+    margin-top: 54px;
+    margin-bottom: 0;
+    padding-bottom: 25px; // hack due to custom scrollbar
+    scrollbar-width: thin;
+
+    .datatable .datatable-row:last-child td:last-child {
+      border-bottom-right-radius: 0;
+    }
+
+    td {
+      height: 40px;
+    }
+  }
 }
 
 .list-wrapper {
@@ -1130,6 +1157,10 @@ td.retake-count {
 
     &.thumbnail {
       padding: 6px;
+
+      .with-schedule & {
+        padding: 3px 6px;
+      }
     }
   }
 

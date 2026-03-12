@@ -14,6 +14,7 @@ import edits from '@/store/modules/edits'
 import entities from '@/store/modules/entities'
 import episodes from '@/store/modules/episodes'
 import files from '@/store/modules/files'
+import hardware from '@/store/modules/hardware'
 import login from '@/store/modules/login'
 import main from '@/store/modules/main'
 import news from '@/store/modules/news'
@@ -24,6 +25,7 @@ import productions from '@/store/modules/productions'
 import schedule from '@/store/modules/schedule'
 import sequences from '@/store/modules/sequences'
 import shots from '@/store/modules/shots'
+import software from '@/store/modules/software'
 import statusAutomations from '@/store/modules/statusautomation'
 import studios from '@/store/modules/studios'
 import taskStatus from '@/store/modules/taskstatus'
@@ -45,6 +47,7 @@ const modules = {
   entities,
   episodes,
   files,
+  hardware,
   login,
   main,
   people,
@@ -55,6 +58,7 @@ const modules = {
   schedule,
   sequences,
   shots,
+  software,
   statusAutomations,
   studios,
   tasks,

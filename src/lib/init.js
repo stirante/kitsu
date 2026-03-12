@@ -1,3 +1,4 @@
+import router from '@/router'
 import store from '@/store'
 
 import { DATA_LOADING_START, DATA_LOADING_END } from '@/store/mutation-types'
@@ -20,7 +21,13 @@ const init = callback => {
       callback()
     })
     .catch(err => {
+      store.commit(DATA_LOADING_END)
+      if (err.status === 403) {
+        router.push({ name: 'login-2fa' })
+        return
+      }
       console.error('An init operation failed: ', err)
+      callback(err)
     })
 }
 

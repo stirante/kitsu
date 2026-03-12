@@ -49,25 +49,45 @@ export const renderComment = (
   departmentMentions,
   personMap,
   departmentMap,
+  taskTypes = [],
   className = ''
 ) => {
   let html = renderMarkdown(input)
 
   if (mentions) {
-    mentions.forEach(personId => {
+    for (const personId of mentions) {
       const person = personMap.get(personId)
+      if (!person) continue
       html = html.replaceAll(
         `@${person.full_name}`,
         `<a class="mention" href="/people/${person.id}">@${person.full_name}</a>`
       )
-    })
-    departmentMentions.forEach(departmentId => {
+    }
+    for (const departmentId of departmentMentions) {
       const department = departmentMap.get(departmentId)
+      if (!department) continue
       html = html.replaceAll(
         `@${department.name}`,
         `<span style="color: ${department.color}">@${department.name}</span>`
       )
+    }
+  }
+
+  if (taskTypes) {
+    // replace #TaskType with a link to the task within the same entity
+    taskTypes.forEach(taskType => {
+      const task_name = encodeHtmlEntities(taskType.name)
+      if (taskType.url)
+        html = html.replaceAll(
+          `#${task_name}`,
+          `<a class="mention mention-task" href="${taskType.url}">#${task_name}</a>`
+        )
     })
+    // replace #All with a link to the shot
+    html = html.replaceAll(
+      '#All',
+      `<a class="mention mention-task" href="#">#All</a>`
+    )
   }
 
   return html.replaceAll(
@@ -86,6 +106,32 @@ export const renderMarkdown = (input, options = {}) => {
   if (!input?.length) return ''
   const html = marked.parse(input)
   return sanitize(html, options)
+}
+
+/**
+ * Encode HTML entities in JavaScript
+ * example task name: "Light & Render" => "Light &amp; Render"
+ * @param {string} str - string to encode
+ * @returns {string} - encoded string
+ */
+const encodeHtmlEntities = str => {
+  return str.replace(
+    /[&<>'"]/g,
+    tag =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        "'": '&#39;',
+        '"': '&quot;'
+      })[tag]
+  )
+
+  // // -- more complex version if needed --
+  // var el = document.createElement("div");
+  // el.innerText = el.textContent = str;
+  // str = el.innerHTML;
+  // return str;
 }
 
 export const replaceTimeWithTimecode = (
@@ -109,7 +155,7 @@ export const replaceTimeWithTimecode = (
 
 export const renderFileSize = size => {
   if (!size) return ''
-  let renderedSize = ''
+  let renderedSize
   if (size > 1000000000) {
     renderedSize = (size / 1000000000).toFixed(1) + 'G'
   } else if (size > 1000000) {

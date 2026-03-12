@@ -10,32 +10,27 @@
   >
     <span
       class="tag task-type-name"
-      :style="{
-        'border-left': '4px solid ' + color,
-        'border-top-right-radius': rounded ? '5px' : '0px',
-        'border-bottom-right-radius': rounded ? '5px' : '0px'
+      :class="{
+        rounded
       }"
+      :title="taskType.name"
     >
       {{ taskType.name }}
     </span>
   </router-link>
   <div
+    class="tag task-type-name no-link"
     :class="{
-      tag: true,
-      'task-type-name': true,
-      'no-link': true,
       deletable,
       canceled: disable,
+      rounded,
       thin: thin
-    }"
-    :style="{
-      'border-left': '4px solid ' + color,
-      'border-top-right-radius': rounded ? '5px' : '0px',
-      'border-bottom-right-radius': rounded ? '5px' : '0px'
     }"
     v-else
   >
-    {{ taskType.name }}
+    <span :title="taskType.name">
+      {{ taskType.name }}
+    </span>
     <span class="delete-times" v-if="deletable" @click="$emit('delete')">
       ×
     </span>
@@ -82,6 +77,10 @@ export default {
     thin: {
       type: Boolean,
       default: false
+    },
+    transparent: {
+      type: Boolean,
+      default: false
     }
   },
 
@@ -92,15 +91,14 @@ export default {
 
     color() {
       return this.taskType.color?.toUpperCase() === '#000000'
-        ? '$grey-strong'
+        ? '#666'
         : this.taskType.color
     },
 
     targetRoute() {
-      let route = {}
       if (this.taskId) {
         if (this.$route.params.episode_id) {
-          route = {
+          return {
             name: 'episode-task',
             params: {
               production_id: this.productionId,
@@ -110,7 +108,7 @@ export default {
             }
           }
         } else {
-          route = {
+          return {
             name: 'task',
             params: {
               production_id: this.productionId,
@@ -120,7 +118,7 @@ export default {
           }
         }
       } else if (this.taskType.for_entity === 'Episode') {
-        route = {
+        return {
           name: 'episodes-task-type',
           params: {
             production_id: this.productionId,
@@ -128,7 +126,7 @@ export default {
           }
         }
       } else {
-        route = {
+        const route = {
           name: 'task-type',
           params: {
             production_id: this.productionId,
@@ -142,8 +140,8 @@ export default {
           route.params.episode_id =
             this.taskType.episode_id || this.$route.params.episode_id
         }
+        return route
       }
-      return route
     }
   }
 }
@@ -151,6 +149,7 @@ export default {
 
 <style lang="scss" scoped>
 .tag {
+  border-left: 4px solid v-bind(color);
   border-radius: 0;
   color: var(--text);
   font-size: 0.9em;
@@ -159,35 +158,37 @@ export default {
   padding: 0 0.7em;
   margin: 0;
 
+  &.deletable {
+    padding-right: 0;
+  }
+
+  &.rounded {
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+  }
+
   &.thin {
     font-size: 0.7em;
     line-height: 0.6em;
     padding: 0 0.5em;
   }
-}
 
-.tag.deletable {
-  padding-right: 0;
-}
-
-.dark .tag {
-  background: $dark-grey-lightest;
-}
-
-.delete-times:hover {
-  cursor: pointer;
+  .dark & {
+    background: $dark-grey-lightest;
+  }
 }
 
 .delete-times {
+  cursor: pointer;
   font-size: 1.2rem;
   font-weight: bold;
   padding-left: 7px;
   padding-bottom: 2px;
   padding-right: 0.7rem;
-}
 
-.delete-times:hover {
-  color: black;
+  &:hover {
+    color: $black;
+  }
 }
 
 .no-link {

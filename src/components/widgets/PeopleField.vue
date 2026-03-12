@@ -60,6 +60,7 @@ export default {
 
   data() {
     return {
+      index: null,
       item: null,
       items: [],
       search: ''
@@ -185,6 +186,11 @@ export default {
 <style lang="scss">
 .multiselect {
   color: var(--text);
+  font-size: inherit;
+
+  &--active {
+    z-index: 501;
+  }
 
   &--disabled {
     background: none;

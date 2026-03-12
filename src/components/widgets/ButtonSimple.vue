@@ -7,6 +7,7 @@
       'is-loading': isLoading,
       'is-primary': isPrimary,
       'is-big': isBig,
+      'is-medium': isMedium,
       'is-thin': isThin
     }"
     :disabled="disabled"
@@ -14,7 +15,8 @@
     :type="type"
     @click="$emit('click', $event)"
   >
-    <grid-icon class="icon" v-if="icon === 'grid'" />
+    <bell-icon class="icon" v-if="icon === 'bell'" />
+    <grid-icon class="icon" v-else-if="icon === 'grid'" />
     <send-icon class="icon" v-else-if="icon === 'send'" />
     <paperclip-icon class="icon" v-else-if="icon === 'attach'" />
     <corner-left-down-icon class="icon" v-else-if="icon === 'undo'" />
@@ -47,6 +49,23 @@
     <codepen-icon class="icon" v-else-if="icon === 'codepen'" />
     <link-icon class="icon" v-else-if="icon === 'link'" />
     <clock-icon class="icon" v-else-if="icon === 'clock'" />
+    <rotate-ccw-icon class="icon" v-else-if="icon === 'refresh'" />
+    <file-down-icon
+      class="icon"
+      :stroke-width="1.5"
+      v-else-if="icon === 'export'"
+    />
+    <calendar-icon
+      class="icon"
+      :stroke-width="1.5"
+      v-else-if="icon === 'calendar'"
+    />
+    <calendar-plus-icon
+      class="icon"
+      :stroke-width="1.5"
+      v-else-if="icon === 'calendar-plus'"
+    />
+    <smile-icon class="icon" v-else-if="icon === 'smile'" />
     <file-digit-icon
       class="icon"
       :stroke-width="1.2"
@@ -72,6 +91,9 @@
 
 <script>
 import {
+  BellIcon,
+  CalendarIcon,
+  CalendarPlusIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -85,6 +107,7 @@ import {
   Edit2Icon,
   GlobeIcon,
   GridIcon,
+  FileDownIcon,
   FilmIcon,
   ImageIcon,
   KeyIcon,
@@ -98,10 +121,12 @@ import {
   PaperclipIcon,
   PauseIcon,
   PlusIcon,
+  RotateCcwIcon,
   SaveIcon,
   SendIcon,
   SkipBackIcon,
   SkipForwardIcon,
+  SmileIcon,
   SquareIcon,
   TriangleIcon,
   XIcon,
@@ -114,6 +139,9 @@ export default {
   name: 'button-simple',
 
   components: {
+    BellIcon,
+    CalendarIcon,
+    CalendarPlusIcon,
     ChevronDownIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
@@ -125,6 +153,7 @@ export default {
     EditIcon,
     Edit2Icon,
     FileDigitIcon,
+    FileDownIcon,
     FilmIcon,
     GlobeIcon,
     GridIcon,
@@ -141,10 +170,12 @@ export default {
     PaperclipIcon,
     PauseIcon,
     PlusIcon,
+    RotateCcwIcon,
     SaveIcon,
     SendIcon,
     SkipBackIcon,
     SkipForwardIcon,
+    SmileIcon,
     SquareIcon,
     TriangleIcon,
     XIcon,
@@ -165,6 +196,10 @@ export default {
       type: String
     },
     isBig: {
+      default: false,
+      type: Boolean
+    },
+    isMedium: {
       default: false,
       type: Boolean
     },
@@ -213,6 +248,11 @@ export default {
   font-size: 1.5rem;
   font-weight: bold;
   padding: 0.5em 1em;
+}
+
+.is-medium {
+  font-size: 1rem;
+  height: 40px;
 }
 
 .is-thin {

@@ -13,6 +13,9 @@
             <th scope="col" class="is-default">
               {{ $t('task_status.fields.is_default') }}
             </th>
+            <th scope="col" class="is-wip">
+              {{ $t('task_status.fields.is_wip') }}
+            </th>
             <th scope="col" class="is-done">
               {{ $t('task_status.fields.is_done') }}
             </th>
@@ -51,6 +54,7 @@
               </td>
               <task-status-cell class="short-name" :entry="taskStatus" />
               <boolean-cell class="is-default" :value="taskStatus.is_default" />
+              <boolean-cell class="is-wip" :value="taskStatus.is_wip" />
               <boolean-cell class="is-done" :value="taskStatus.is_done" />
               <boolean-cell class="is-retake" :value="taskStatus.is_retake" />
               <boolean-cell
@@ -66,7 +70,6 @@
                 :value="taskStatus.is_feedback_request"
               />
               <row-actions-cell
-                :entry-id="taskStatus.id"
                 :hide-delete="
                   taskStatus.is_default === true || taskStatus.for_concept
                 "
@@ -177,8 +180,9 @@ export default {
   min-width: 150px;
 }
 
-.is-done,
 .is-default,
+.is-wip,
+.is-done,
 .is-retake,
 .is-artist-allowed,
 .is-client-allowed,

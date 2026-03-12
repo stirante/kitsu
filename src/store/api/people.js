@@ -36,8 +36,8 @@ export default {
     })
   },
 
-  getPeople(callback) {
-    client.get('/api/data/persons?relations=true', callback)
+  getPeople() {
+    return client.pget('/api/data/persons?relations=true')
   },
 
   getPerson(personId) {
@@ -136,23 +136,23 @@ export default {
     return client.ppost(`/api/pictures/thumbnails/persons/${userId}`, formData)
   },
 
-  changePassword(form, callback) {
+  changePassword(form) {
     const data = {
       old_password: form.oldPassword,
       password: form.password,
       password_2: form.password2
     }
-    client.post('/api/auth/change-password', data, callback)
+    return client.ppost('/api/auth/change-password', data)
   },
 
   preEnableTOTP() {
-    return client.pput('/api/auth/totp', {}).then(body => Promise.resolve(body))
+    return client.pput('/api/auth/totp', {})
   },
 
   enableTOTP(totp) {
     return client
       .ppost('/api/auth/totp', { totp: totp })
-      .then(body => Promise.resolve(body.otp_recovery_codes))
+      .then(body => body.otp_recovery_codes)
   },
 
   disableTOTP(twoFactorPayload) {
@@ -164,15 +164,13 @@ export default {
   },
 
   preEnableEmailOTP() {
-    return client
-      .pput('/api/auth/email-otp', {})
-      .then(body => Promise.resolve(body))
+    return client.pput('/api/auth/email-otp', {})
   },
 
   enableEmailOTP(emailOTP) {
     return client
       .ppost('/api/auth/email-otp', { email_otp: emailOTP })
-      .then(body => Promise.resolve(body.otp_recovery_codes))
+      .then(body => body.otp_recovery_codes)
   },
 
   disableEmailOTP(twoFactorPayload) {
@@ -180,7 +178,7 @@ export default {
   },
 
   preRegisterFIDO() {
-    return client.pput('/api/auth/fido', {}).then(body => Promise.resolve(body))
+    return client.pput('/api/auth/fido', {})
   },
 
   registerFIDO(registrationResponse, deviceName) {
@@ -189,22 +187,22 @@ export default {
         registration_response: registrationResponse,
         device_name: deviceName
       })
-      .then(body => Promise.resolve(body.otp_recovery_codes))
+      .then(body => body.otp_recovery_codes)
   },
 
   getFIDOChallenge(email) {
     return client.pget(`/api/auth/fido?email=${email}`)
   },
 
-  unregisterFIDO(twoFactorPayload, deviceName) {
-    const data = { ...twoFactorPayload, device_name: deviceName }
+  unregisterFIDO(deviceName) {
+    const data = { device_name: deviceName }
     return client.pdel('/api/auth/fido', data)
   },
 
   newRecoveryCodes(twoFactorPayload) {
     return client
       .pput('/api/auth/recovery-codes', twoFactorPayload)
-      .then(body => Promise.resolve(body.otp_recovery_codes))
+      .then(body => body.otp_recovery_codes)
   },
 
   loadTodos() {
@@ -240,15 +238,15 @@ export default {
     name,
     color,
     productionId,
-    entityType,
+    isShared,
     departmentId
   ) {
     const data = {
       list_type: listType,
       name,
       color,
+      is_shared: isShared,
       project_id: productionId,
-      entity_type: entityType,
       department_id: departmentId
     }
     return client.ppost('/api/data/user/filter-groups', data)
@@ -269,8 +267,8 @@ export default {
     return client.pdel(`/api/data/user/filter-groups/${filterGroup.id}`)
   },
 
-  getUserSearchFilters(callback) {
-    client.get('/api/data/user/filters', callback)
+  getUserSearchFilters() {
+    return client.pget('/api/data/user/filters')
   },
 
   updateFilter(searchFilter) {
@@ -305,6 +303,18 @@ export default {
     return client.pget(`/api/data/persons/${personId}/time-spents/${date}`)
   },
 
+  getTimeSpentsByPeriod(personId, startDate, endDate) {
+    return client.pget(
+      `/api/data/persons/${personId}/time-spents/?start_date=${startDate}&end_date=${endDate}`
+    )
+  },
+
+  getProjectTimeSpentsByTaskType(projectId, taskTypeId, startDate, endDate) {
+    return client.pget(
+      `/api/data/projects/${projectId}/task-types/${taskTypeId}/time-spents?start_date=${startDate}&end_date=${endDate}`
+    )
+  },
+
   setTimeSpent(taskId, personId, date, hours) {
     // Date is a string with following format: YYYYY-MM-DD.
     const url = `/api/actions/tasks/${taskId}/time-spents/${date}/persons/${personId}`
@@ -324,6 +334,12 @@ export default {
       }
     }
     return client.pget(path)
+  },
+
+  getProjectDaysOff(projectId, startDate, endDate) {
+    return client.pget(
+      `/api/data/projects/${projectId}/day-offs?start_date=${startDate}&end_date=${endDate}`
+    )
   },
 
   getDayOff(personId, date) {

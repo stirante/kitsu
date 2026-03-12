@@ -1,18 +1,33 @@
 <template>
   <div class="schedule-wrapper">
-    <div :class="scheduleClass" ref="schedule">
+    <div
+      ref="schedule"
+      class="schedule unselectable"
+      :class="`zoom-level-${zoomLevel}`"
+    >
       <div
         ref="entity-list"
         class="entities"
         @mousedown="startBrowsingY"
         @touchstart="startBrowsingY"
+        v-show="!hideEntities"
       >
         <div
-          class="has-text-right total-man-days mr0"
+          class="total-man-days"
           :class="{
             'without-milestones': !withMilestones
           }"
         >
+          <div class="actions">
+            <button
+              class="button is-small is-link"
+              :title="$t('main.expand_all')"
+              @click="$emit('expand-all')"
+              v-if="showExpandAll"
+            >
+              <list-chevrons-up-down-icon :size="15" />
+            </button>
+          </div>
           <span class="total-value" v-if="!hideManDays">
             {{ formatDuration(totalManDays) }} {{ $t('schedule.md') }}
           </span>
@@ -26,6 +41,7 @@
         >
           <div
             :key="`entity-${rootElement.id}`"
+            class="timeline-element"
             v-for="rootElement in hierarchy"
           >
             <div
@@ -70,23 +86,9 @@
                     : `4px solid ${rootElement.color}`
                 }"
                 :title="rootElement.name"
-                v-if="!rootElement.route"
               >
                 {{ rootElement.name }}
               </span>
-              <router-link
-                class="filler flexrow-item root-element-name ellipsis"
-                :style="{
-                  'border-left': rootElement.avatar
-                    ? null
-                    : `4px solid ${rootElement.color}`
-                }"
-                :title="rootElement.name"
-                :to="rootElement.route"
-                v-else
-              >
-                {{ rootElement.name }}
-              </router-link>
               <department-name
                 class="ml05"
                 :department="departmentMap.get(departmentId)"
@@ -95,14 +97,22 @@
                 only-dot
                 v-for="departmentId in rootElement.departments"
               />
+              <router-link
+                class="root-element-link flexrow-item"
+                :title="rootElement.name"
+                :to="rootElement.route"
+                v-if="rootElement.route"
+              >
+                <link-icon :size="12" v-if="rootElement.route" />
+              </router-link>
               <input
-                class="flexrow-item mr1 man-day-input"
+                class="man-day-input flexrow-item mr1"
                 type="number"
                 step="any"
                 placeholder="0"
                 @input="
                   $emit('estimation-changed', {
-                    days: $event.target.value,
+                    days: $event.target.valueAsNumber || 0,
                     item: rootElement,
                     daysOff: rootElement.daysOff
                   })
@@ -133,6 +143,7 @@
 
             <div
               class="children"
+              :class="{ mb0: hideRoot }"
               :style="childrenStyle(rootElement, multiline, true)"
               v-if="rootElement.expanded"
             >
@@ -185,13 +196,18 @@
                     :style="childNameStyle(rootElement, j)"
                   >
                     <router-link
+                      class="filler flexrow-item child-element-name ellipsis-2-lines"
+                      :title="childElement.name"
                       :to="childElement.route"
-                      class="filler flexrow-item child-element-name"
                       v-if="childElement.route"
                     >
                       {{ childElement.name }}
                     </router-link>
-                    <span class="filler flexrow-item" v-else>
+                    <span
+                      class="filler flexrow-item ellipsis-2-lines"
+                      :title="childElement.name"
+                      v-else
+                    >
                       {{ childElement.name }}
                     </span>
                     <span
@@ -231,6 +247,9 @@
         <div
           ref="timeline-header"
           class="timeline-header"
+          :class="{
+            'without-milestones': !withMilestones
+          }"
           @mousedown="startBrowsingX"
           @touchstart="startBrowsingX"
           v-if="zoomLevel > 0"
@@ -303,6 +322,9 @@
         <div
           ref="timeline-header"
           class="timeline-header"
+          :class="{
+            'without-milestones': !withMilestones
+          }"
           @mousedown="startBrowsingX"
           @touchstart="startBrowsingX"
           v-else
@@ -389,6 +411,11 @@
             >
               <div
                 class="day-off"
+                :class="{
+                  'day-off-sub-zone':
+                    subStartDate?.diff(dayOff.date, 'days') > 0 ||
+                    subEndDate?.diff(dayOff.date, 'days') < 0
+                }"
                 :key="`dayoff-${dayOff.id}-${index}`"
                 :style="dayOffStyle(dayOff)"
                 :title="dayOff.description"
@@ -406,7 +433,7 @@
                   :class="{
                     thinner: multiline
                   }"
-                  :title="`${rootElement.name} (${rootElement.startDate.format('YYYY-MM-DD')} - ${rootElement.endDate.format('YYYY-MM-DD')})`"
+                  :title="`${rootElement.name} (${rootElement.startDate?.format('YYYY-MM-DD')} - ${rootElement.endDate?.format('YYYY-MM-DD')})`"
                   :style="timebarStyle(rootElement, true)"
                 >
                   <div
@@ -456,6 +483,12 @@
                 @drop="onTaskDrop($event, rootElement)"
               >
                 <div
+                  class="entity-line child-line hidden"
+                  v-if="invertLinesColor"
+                >
+                  <!-- to invert odd/event line color -->
+                </div>
+                <div
                   class="entity-line child-line"
                   :class="{ multiline }"
                   :key="`entity-line-${childElement.id}`"
@@ -466,18 +499,125 @@
                   v-for="childElement in rootElement.children"
                   v-show="!rootElement.loading"
                 >
+                  <template v-if="withStatuses">
+                    <span
+                      class="status-date status-date-wip"
+                      :class="{
+                        'status-date-gap':
+                          childElement.real_start_date.slice(0, 10) ===
+                            childElement.end_date?.slice(0, 10) ||
+                          childElement.real_start_date.slice(0, 10) ===
+                            childElement.done_date?.slice(0, 10)
+                      }"
+                      :style="dateStatusStyle(childElement.real_start_date)"
+                      :title="statuses.wip.name"
+                      v-if="childElement.real_start_date"
+                    >
+                    </span>
+                    <span
+                      class="status-date status-date-wfa"
+                      :class="{
+                        'status-date-gap':
+                          childElement.end_date.slice(0, 10) ===
+                            childElement.real_start_date?.slice(0, 10) ||
+                          childElement.end_date.slice(0, 10) ===
+                            childElement.done_date?.slice(0, 10)
+                      }"
+                      :style="dateStatusStyle(childElement.end_date)"
+                      :title="statuses.wfa.name"
+                      v-if="childElement.end_date"
+                    >
+                    </span>
+                    <span
+                      class="status-date status-date-done"
+                      :class="{
+                        'status-date-gap':
+                          childElement.done_date.slice(0, 10) ===
+                            childElement.real_start_date?.slice(0, 10) ||
+                          childElement.done_date.slice(0, 10) ===
+                            childElement.end_date?.slice(0, 10)
+                      }"
+                      :style="dateStatusStyle(childElement.done_date)"
+                      :title="statuses.done.name"
+                      v-if="childElement.done_date"
+                    >
+                    </span>
+                  </template>
+
+                  <template v-if="withTimesheets && rootElement.timesheet">
+                    <div
+                      class="timesheet"
+                      :style="
+                        timesheetStyle(
+                          timesheet,
+                          childElement,
+                          rootElement,
+                          withEstimations
+                        )
+                      "
+                      :title="`${formatDuration(timesheet.duration)} ${isDurationInHours ? $tc('main.hours_spent', formatDuration(timesheet.duration, false)) : $tc('main.days_spent', formatDuration(timesheet.duration, false))}`"
+                      :key="timesheet.id"
+                      v-for="timesheet in rootElement.timesheet.filter(
+                        ({ task_id }) => task_id === childElement.id
+                      )"
+                    ></div>
+                  </template>
+
+                  <div
+                    class="timebar timebar-ghost timebar-ghost-before"
+                    :title="`${childElement.previousElement.name} (${childElement.previousElement.startDate.format('YYYY-MM-DD')} - ${childElement.previousElement.endDate.format('YYYY-MM-DD')})`"
+                    :class="{
+                      'with-timesheets': withTimesheets
+                    }"
+                    :style="
+                      timebarChildStyle(
+                        childElement.previousElement,
+                        rootElement,
+                        multiline,
+                        50
+                      )
+                    "
+                    v-if="withGhosts && childElement.previousElement"
+                  ></div>
+
+                  <div
+                    class="timebar timebar-ghost timebar-ghost-after"
+                    :title="`${childElement.nextElement.name} (${childElement.nextElement.startDate.format('YYYY-MM-DD')} - ${childElement.nextElement.endDate.format('YYYY-MM-DD')})`"
+                    :class="{
+                      'with-timesheets': withTimesheets
+                    }"
+                    :style="
+                      timebarChildStyle(
+                        childElement.nextElement,
+                        rootElement,
+                        multiline,
+                        50
+                      )
+                    "
+                    v-if="withGhosts && childElement.nextElement"
+                  ></div>
+
                   <div
                     class="timebar"
                     :class="{
                       selected: isSelected(childElement),
-                      'timebar-subchildren': subchildren
+                      'timebar-subchildren': subchildren,
+                      'with-timesheets': withTimesheets,
+                      invalid: isOverlapping(childElement)
                     }"
                     :title="`${multiline && childElement.project_name ? `${childElement.project_name} - ` : ''}${childElement.name} (${childElement.startDate.format('YYYY-MM-DD')} - ${childElement.endDate.format('YYYY-MM-DD')})`"
                     :style="
-                      timebarChildStyle(childElement, rootElement, multiline)
+                      timebarChildStyle(
+                        childElement,
+                        rootElement,
+                        multiline,
+                        withTimesheets && 25,
+                        isDarkTheme ? 'black' : 'white'
+                      )
                     "
                     v-show="subchildren || isVisible(childElement)"
                     @click="$emit('item-selected', rootElement, childElement)"
+                    v-if="withEstimations"
                   >
                     <div
                       class="timebar-left-hand"
@@ -629,6 +769,8 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   EditIcon,
+  LinkIcon,
+  ListChevronsUpDownIcon,
   PlusIcon
 } from 'lucide-vue-next'
 import moment from 'moment-timezone'
@@ -666,6 +808,8 @@ export default {
     DepartmentName,
     EditIcon,
     EditMilestoneModal,
+    LinkIcon,
+    ListChevronsUpDownIcon,
     PeopleAvatar,
     PlusIcon,
     ProductionName,
@@ -726,9 +870,9 @@ export default {
       type: Boolean,
       default: true
     },
-    height: {
-      type: Number,
-      default: 0
+    hideEntities: {
+      type: Boolean,
+      default: false
     },
     hideManDays: {
       type: Boolean,
@@ -737,6 +881,14 @@ export default {
     hierarchy: {
       default: () => [],
       type: Array
+    },
+    invertLinesColor: {
+      type: Boolean,
+      default: false
+    },
+    showExpandAll: {
+      type: Boolean,
+      default: false
     },
     subEndDate: {
       type: Object,
@@ -758,6 +910,22 @@ export default {
       type: Boolean,
       default: true
     },
+    withEstimations: {
+      type: Boolean,
+      default: true
+    },
+    withGhosts: {
+      type: Boolean,
+      default: false
+    },
+    withStatuses: {
+      type: Boolean,
+      default: false
+    },
+    withTimesheets: {
+      type: Boolean,
+      default: false
+    },
     hideRoot: {
       type: Boolean,
       default: false
@@ -777,11 +945,16 @@ export default {
     reassignable: {
       type: Boolean,
       default: false
+    },
+    type: {
+      type: String,
+      validator: value => ['prev', 'real'].includes(value)
     }
   },
 
   emits: [
     'estimation-changed',
+    'expand-all',
     'item-assign',
     'item-changed',
     'item-drop',
@@ -789,7 +962,9 @@ export default {
     'item-unassign',
     'root-element-expanded',
     'root-element-selected',
-    'task-selected'
+    'scroll',
+    'task-selected',
+    'task-unselected'
   ],
 
   mounted() {
@@ -811,8 +986,17 @@ export default {
       'milestones',
       'openProductions',
       'organisation',
-      'taskMap'
+      'taskMap',
+      'taskStatuses'
     ]),
+
+    statuses() {
+      return {
+        wip: this.taskStatuses.find(status => status.is_wip) ?? {},
+        wfa: this.taskStatuses.find(status => status.is_feedback_request) ?? {},
+        done: this.taskStatuses.find(status => status.is_done) ?? {}
+      }
+    },
 
     currentMilestones() {
       const localMilestones = {}
@@ -912,10 +1096,6 @@ export default {
       return this.daysAvailable
     },
 
-    nbDisplayedDays() {
-      return this.displayedDays.length
-    },
-
     displayedDaysIndex() {
       let index = 0
       const dayIndex = {}
@@ -936,16 +1116,15 @@ export default {
       return weekIndex
     },
 
+    isRealSchedule() {
+      return this.type === 'real'
+    },
+
     totalManDays() {
-      return this.hierarchy.reduce((acc, timeElement) => {
-        let value = acc
-        let manDays = timeElement.man_days
-        if (timeElement.man_days) {
-          if (typeof manDays === 'string') manDays = parseInt(manDays)
-          value = acc + manDays
-        }
-        return value
-      }, 0)
+      return this.hierarchy.reduce(
+        (acc, timeElement) => acc + (timeElement.man_days || 0),
+        0
+      )
     },
 
     // References
@@ -979,15 +1158,6 @@ export default {
     },
 
     // Styles
-
-    scheduleClass() {
-      const className = {
-        schedule: true,
-        unselectable: true
-      }
-      className[`zoom-level-${this.zoomLevel}`] = true
-      return className
-    },
 
     timelineStyle() {
       const firstDay = this.daysAvailable[0]
@@ -1092,6 +1262,17 @@ export default {
       }
     },
 
+    refreshManDays(rootElement) {
+      if (this.hideManDays || !rootElement?.children?.length) {
+        return
+      }
+
+      rootElement.man_days = rootElement.children.reduce(
+        (acc, child) => acc + (child.man_days || 0),
+        0
+      )
+    },
+
     isVisible(timeElement) {
       const isStartDateOk = timeElement.startDate.isSameOrAfter(this.startDate)
       const isEndDateOk = timeElement.endDate.isSameOrBefore(
@@ -1101,17 +1282,12 @@ export default {
     },
 
     resetScheduleSize() {
-      if (this.height) this.schedule.style.height = `${this.height}px`
       if (this.timelineContent) {
         if (this.zoomLevel > 0) {
-          this.timelineContent.style.width = `${this.nbDisplayedDays * this.cellWidth}px`
+          this.timelineContent.style.width = `${this.displayedDays.length * this.cellWidth}px`
         } else {
           this.timelineContent.style.width = `${this.weeksAvailable.length * this.cellWidth}px`
         }
-        let contentHeight = this.schedule.offsetHeight - 250
-        if (!this.withMilestones) contentHeight += 40
-        this.timelineContentWrapper.style.height = `${contentHeight}px`
-        this.entityList.style.height = `${this.schedule.offsetHeight - 169}px`
       }
     },
 
@@ -1131,18 +1307,11 @@ export default {
     },
 
     onChildEstimationChanged(event, childElement, rootElement) {
-      const estimation = Number(event.target.value)
+      const estimation = event.target.valueAsNumber || 0
       if (this.isEstimationLinked) {
         childElement.man_days = daysToMinutes(this.organisation, estimation)
         childElement.estimation = childElement.man_days
-        rootElement.man_days = rootElement.children.reduce((acc, child) => {
-          let value = acc
-          const manDays = child.man_days
-          if (child.man_days) {
-            value = acc + manDays
-          }
-          return value
-        }, 0)
+        this.refreshManDays(rootElement)
 
         if (estimation > 0) {
           childElement.endDate = addBusinessDays(
@@ -1161,17 +1330,20 @@ export default {
     },
 
     updatePositionBarPosition(event) {
-      if (!this.timelineContentWrapper) return
-      let position =
-        this.timelineContentWrapper.scrollLeft + this.getClientX(event)
-      position -= 332
-      position = Math.floor(position / this.cellWidth) * this.cellWidth
-      if (
-        this.getClientX(event) - 320 <
-        this.timelineContentWrapper.offsetWidth
-      ) {
-        this.timelinePosition.style.left = `${position}px`
-      }
+      if (!this.timelineContentWrapper || !this.timelinePosition) return
+
+      const cursorX =
+        this.getClientX(event) -
+        this.timelineContentWrapper.getBoundingClientRect().left
+
+      if (cursorX <= 0 || cursorX >= this.timelineContentWrapper.offsetWidth)
+        return
+
+      const left =
+        Math.floor(
+          (this.timelineContentWrapper.scrollLeft + cursorX) / this.cellWidth
+        ) * this.cellWidth
+      this.timelinePosition.style.left = `${left}px`
     },
 
     isValidItemDates(startDate, endDate) {
@@ -1196,7 +1368,7 @@ export default {
     },
 
     resetDroppableTargets() {
-      this.schedule.querySelectorAll('.droppable').forEach(element => {
+      this.schedule?.querySelectorAll('.droppable').forEach(element => {
         element.classList.remove('droppable')
       })
     },
@@ -1308,8 +1480,8 @@ export default {
           if (dateDiff && this.isValidItemDates(newStartDate, newEndDate)) {
             // update all selected items
             this.selection.forEach(item => {
-              item.startDate.add(dateDiff)
-              item.endDate.add(dateDiff)
+              item.startDate = item.startDate.clone().add(dateDiff)
+              item.endDate = item.endDate.clone().add(dateDiff)
             })
             if (this.multiline || this.subchildren) {
               const parentElements = [
@@ -1452,6 +1624,16 @@ export default {
       }
     },
 
+    isOverlapping(item) {
+      return (
+        this.withGhosts &&
+        ((item.previousElement &&
+          item.startDate.isSameOrBefore(item.previousElement.endDate)) ||
+          (item.nextElement &&
+            item.endDate.isSameOrAfter(item.nextElement.startDate)))
+      )
+    },
+
     isSelected(item) {
       return this.selection.some(({ id }) => id === item.id)
     },
@@ -1538,11 +1720,24 @@ export default {
 
     onTimelineScroll(event) {
       if (!event?.target) return
-      const position = event.target
-      const newTop = position.scrollTop
-      this.entityList.scrollTop = newTop
-      const newLeft = position.scrollLeft
-      this.timelineHeader.scrollLeft = newLeft
+      const { scrollTop, scrollLeft } = event.target
+      if (this.entityList) {
+        this.entityList.scrollTop = scrollTop
+      }
+      if (this.timelineHeader) {
+        this.timelineHeader.scrollLeft = scrollLeft
+      }
+
+      this.$emit('scroll', { top: scrollTop })
+    },
+
+    setScrollPosition(top) {
+      if (this.timelineContentWrapper) {
+        this.timelineContentWrapper.scrollTop = top
+      }
+      if (this.entityList) {
+        this.entityList.scrollTop = top
+      }
     },
 
     scrollScheduleLeft(event) {
@@ -1553,7 +1748,9 @@ export default {
       const newLeft = previousLeft - movementX
       this.initialClientX = this.getClientX(event)
       this.timelineContentWrapper.scrollLeft = newLeft
-      this.timelineHeader.scrollLeft = newLeft
+      if (this.timelineHeader) {
+        this.timelineHeader.scrollLeft = newLeft
+      }
     },
 
     scrollScheduleTop(event) {
@@ -1563,8 +1760,7 @@ export default {
         event.movementY || this.getClientY(event) - this.initialClientY
       const newTop = previousTop - movementY
       this.initialClientY = this.getClientY(event)
-      this.timelineContentWrapper.scrollTop = newTop
-      this.entityList.scrollTop = newTop
+      this.setScrollPosition(newTop)
     },
 
     scrollToToday() {
@@ -1623,6 +1819,7 @@ export default {
           this.selection.forEach(item => {
             this.$emit('item-changed', item)
             this.refreshItemPositions(item.parentElement)
+            this.refreshManDays(item.parentElement)
           })
           // clear selection after moving a single item
           if (this.isChangeDates && this.selection.length === 1) {
@@ -1643,6 +1840,7 @@ export default {
         }
         if (target) {
           this.resetSelection()
+          this.$emit('task-unselected')
         }
       }
       this.resetDroppableTargets()
@@ -1686,13 +1884,19 @@ export default {
 
     dayOffStyle(dayOff) {
       return {
-        left: `${this.getDayOffLeft(dayOff)}px`,
+        left: `${this.getLeftPosition(dayOff.date)}px`,
         width: `${this.cellWidth - 1}px`
       }
     },
 
-    getDayOffLeft(dayOff) {
-      const startDate = moment.utc(dayOff.date)
+    dateStatusStyle(date) {
+      return {
+        left: `${this.getLeftPosition(date) + this.cellWidth / 2 - 3}px`
+      }
+    },
+
+    getLeftPosition(date) {
+      const startDate = moment.utc(date)
       const startDiff = this.dateDiff(
         this.startDate,
         startDate,
@@ -1770,7 +1974,14 @@ export default {
       }
     },
 
-    timebarChildStyle(timeElement, rootElement, multiline = false) {
+    timebarChildStyle(
+      timeElement,
+      rootElement,
+      multiline = false,
+      opacityPercentage = 0,
+      opacityColor = 'transparent'
+    ) {
+      const elementColor = timeElement.color || rootElement.color
       return {
         left: !multiline && `${this.getTimebarLeft(timeElement)}px`,
         width: `${this.getTimebarWidth(timeElement)}px`,
@@ -1779,7 +1990,18 @@ export default {
             ? 'all-scroll'
             : 'ew-resize'
           : 'default',
-        background: timeElement.color || rootElement.color
+        background: opacityPercentage
+          ? `color-mix(in srgb, ${elementColor}, ${opacityColor} ${opacityPercentage}%)` // lighter color
+          : elementColor
+      }
+    },
+
+    timesheetStyle(timesheet, timeElement, rootElement, withEstimations) {
+      return {
+        top: withEstimations ? '7px' : '18px',
+        left: `${this.getTimebarLeft(timesheet, true)}px`,
+        width: `${this.getTimebarWidth(timesheet)}px`,
+        background: timesheet.color || timeElement.color || rootElement.color
       }
     },
 
@@ -1804,8 +2026,10 @@ export default {
       const name = task.entity.name
       const startDate = task.startDate.format('YYYY-MM-DD')
       const endDate = task.endDate.format('YYYY-MM-DD')
-      const estimation = this.formatDuration(task.estimation)
-      return `${name} (${startDate} - ${endDate}) ${estimation} ${this.$t('schedule.md')}`
+      const duration = this.isRealSchedule
+        ? this.formatDuration(task.duration)
+        : this.formatDuration(task.estimation)
+      return `${name} (${startDate} - ${endDate}) ${duration} ${this.$t('schedule.md')}`
     },
 
     getTimebarLeft(timeElement) {
@@ -2044,6 +2268,13 @@ export default {
         rootElement,
         this.multiline ? this.refreshItemPositions : undefined
       )
+    },
+
+    exportData() {
+      return {
+        header: this.daysAvailable,
+        hierarchy: this.hierarchy
+      }
     }
   },
 
@@ -2181,17 +2412,17 @@ const setItemPositions = (items, unitOfTime = 'days') => {
   }
 
   .child-element-name {
-    color: white;
+    color: $white;
   }
 
   .timeline {
     .timeline-header {
       background: transparent;
-      color: white;
+      color: $white;
 
       .day {
         .day-number {
-          color: white;
+          color: $white;
         }
 
         .day-name {
@@ -2199,14 +2430,14 @@ const setItemPositions = (items, unitOfTime = 'days') => {
           padding-bottom: 0;
           &.new-month,
           &.new-week {
-            border-left: 2px solid white;
+            border-left: 2px solid $white;
           }
         }
 
         .month-name {
           background: $dark-grey-2;
-          border-left: 2px solid white;
-          color: white;
+          border-left: 2px solid $white;
+          color: $white;
         }
       }
     }
@@ -2220,7 +2451,7 @@ const setItemPositions = (items, unitOfTime = 'days') => {
         }
 
         .milestone-vertical-line {
-          border-left: 1px dashed white;
+          border-left: 1px dashed $white;
         }
       }
     }
@@ -2228,12 +2459,12 @@ const setItemPositions = (items, unitOfTime = 'days') => {
 
   .expand,
   .man-day-input {
-    color: white;
+    color: $white;
   }
 
   .total-man-days {
     background: $dark-grey-2;
-    color: white;
+    color: $white;
   }
 
   .entity-name {
@@ -2271,21 +2502,55 @@ const setItemPositions = (items, unitOfTime = 'days') => {
   right: 0;
   left: 0;
   bottom: 0;
-  height: 97vh;
+  height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: row;
 }
 
 .entities {
-  background: white;
+  background: $white;
   min-width: 300px;
+  padding-bottom: 20px; //hack due to custom scrollbar
   overflow: hidden;
   z-index: 2;
 
   .entity-line {
     max-width: 300px;
     min-width: 300px;
+  }
+}
+
+.status-date {
+  position: absolute;
+  top: 2px;
+  width: 4px;
+  height: 36px;
+  z-index: 100;
+
+  .dark & {
+    box-shadow: $grey 0 0 1px 1px;
+  }
+
+  &-wip {
+    background-color: blue;
+    text-align: left;
+
+    &.status-date-gap {
+      transform: translateX(calc(-100% - 2px));
+    }
+  }
+  &-wfa {
+    background-color: purple;
+    text-align: center;
+  }
+  &-done {
+    background-color: green;
+    text-align: right;
+
+    &.status-date-gap {
+      transform: translateX(calc(100% + 2px));
+    }
   }
 }
 
@@ -2312,9 +2577,14 @@ const setItemPositions = (items, unitOfTime = 'days') => {
   }
 
   .expand {
-    color: white;
+    color: $white;
     cursor: pointer;
     margin-right: 0.5em;
+  }
+
+  .root-element-link,
+  .root-element-link + * {
+    margin-left: 0.5em;
   }
 
   &.child-line {
@@ -2340,9 +2610,15 @@ const setItemPositions = (items, unitOfTime = 'days') => {
     white-space: nowrap;
     position: relative;
     margin-left: 2px;
+    padding-right: 20px; //hack due to custom scrollbar
     padding-bottom: 0;
     overflow: hidden;
     z-index: 0;
+    min-height: 85px;
+
+    &.without-milestones {
+      min-height: 54px;
+    }
 
     .day {
       display: inline-block;
@@ -2388,14 +2664,14 @@ const setItemPositions = (items, unitOfTime = 'days') => {
       }
 
       .day-off-icon {
-        color: white;
+        color: $white;
         position: absolute;
         top: -1px;
         z-index: 10000;
       }
 
       .month-name {
-        background: white;
+        background: $white;
         border-left: 2px solid black;
         bottom: 0;
         color: black;
@@ -2525,6 +2801,25 @@ const setItemPositions = (items, unitOfTime = 'days') => {
             top: 13px;
             font-size: 0.6em;
 
+            &.invalid {
+              box-shadow: 0 0 4px 2px $red;
+            }
+
+            &.with-timesheets {
+              top: 18px;
+            }
+
+            &.timebar-ghost {
+              position: absolute;
+
+              &-before {
+                margin-top: -7px;
+              }
+              &-after {
+                margin-top: 7px;
+              }
+            }
+
             &.timebar-subchildren {
               top: 0;
               height: 20px;
@@ -2545,6 +2840,14 @@ const setItemPositions = (items, unitOfTime = 'days') => {
           }
           .timebar-right-hand {
             right: -12px;
+          }
+
+          .timesheet {
+            position: absolute;
+            height: 6px;
+            border-radius: 2px;
+            z-index: 101;
+            transition: top 0.2s;
           }
         }
       }
@@ -2670,6 +2973,9 @@ const setItemPositions = (items, unitOfTime = 'days') => {
   margin-bottom: 1em;
   min-height: 40px;
 }
+.timeline-element:last-child .children {
+  margin-bottom: 0;
+}
 
 .child {
   padding-bottom: 1px;
@@ -2682,22 +2988,29 @@ const setItemPositions = (items, unitOfTime = 'days') => {
 
   .filler {
     margin: 0;
-    margin: 0;
   }
 }
 
 .total-man-days {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
   position: absolute;
-  background: white;
-  border-top-left-radius: 10px;
+  background: $white;
   height: 85px;
-  margin-right: 0.5em;
-  margin-bottom: 0;
   min-width: 300px;
-  padding-bottom: 0;
+  padding-bottom: 2px;
+  padding-left: 5px;
   padding-right: 5px;
-  padding-top: 55px;
   z-index: 2;
+
+  .actions .button {
+    opacity: 0.5;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
 
   .total-value {
     font-size: 20px;
@@ -2746,7 +3059,7 @@ const setItemPositions = (items, unitOfTime = 'days') => {
     min-width: 100px;
     text-align: center;
     top: -5px;
-    background: white;
+    background: $white;
     z-index: 100;
     transform: translateX(-50%);
   }
@@ -2771,7 +3084,7 @@ const setItemPositions = (items, unitOfTime = 'days') => {
 
   .milestone-tooltip:after {
     border-color: rgba(255, 255, 255, 0);
-    border-top-color: #ffffff;
+    border-top-color: $white;
     border-width: 5px;
     margin-left: -5px;
   }
@@ -2811,7 +3124,7 @@ const setItemPositions = (items, unitOfTime = 'days') => {
     .button {
       background: black;
       border: none;
-      color: white;
+      color: $white;
       height: 20px;
       margin-top: -2px;
       padding: 0;
@@ -2860,6 +3173,10 @@ const setItemPositions = (items, unitOfTime = 'days') => {
   .dark & {
     color: $white;
     background-color: #43474d;
+  }
+
+  &.day-off-sub-zone {
+    background-color: initial;
   }
 
   .day-off-icon {

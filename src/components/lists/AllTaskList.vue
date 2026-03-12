@@ -145,19 +145,26 @@
       <table-info :is-loading="isLoading" :is-error="isError" />
     </div>
     <p class="has-text-centered nb-tasks" v-if="!isLoading">
-      {{ stats.total }} {{ $tc('tasks.number', stats.total) }} ({{
-        formatDuration(stats.total_estimation)
+      {{ stats.total }}
+      {{ $tc('tasks.number', stats.total) }}
+      ({{ formatDuration(stats.total_duration) }}
+      {{
+        isDurationInHours
+          ? $tc('main.hours_spent', formatDuration(stats.total_duration, false))
+          : $tc('main.days_spent', formatDuration(stats.total_duration, false))
       }}
+      /
+      {{ formatDuration(stats.total_estimation) }}
       {{
         isDurationInHours
-          ? $tc('main.hours_estimated', isTimeEstimatedPlural)
-          : $tc('main.days_estimated', isTimeEstimatedPlural)
-      }},
-      {{ formatDuration(stats.total_duration) }}
-      {{
-        isDurationInHours
-          ? $tc('main.hours_spent', isTimeSpentPlural)
-          : $tc('main.days_spent', isTimeSpentPlural)
+          ? $tc(
+              'main.hours_estimated',
+              formatDuration(stats.total_estimation, false)
+            )
+          : $tc(
+              'main.days_estimated',
+              formatDuration(stats.total_estimation, false)
+            )
       }})
     </p>
   </div>
@@ -255,29 +262,6 @@ export default {
       'taskTypeMap'
     ]),
 
-    isTimeSpentPlural() {
-      const divisor = this.isDurationInHours
-        ? 60
-        : 60 * this.organisation.hours_by_day
-      return (
-        Math.floor(
-          (this.stats.total_duration ? this.stats.total_duration : 0) / divisor
-        ) >= 1
-      )
-    },
-
-    isTimeEstimatedPlural() {
-      const divisor = this.isDurationInHours
-        ? 60
-        : 60 * this.organisation.hours_by_day
-      return (
-        Math.floor(
-          (this.stats.total_estimation ? this.stats.total_estimation : 0) /
-            divisor
-        ) >= 1
-      )
-    },
-
     nbFrames() {
       let total = 0
       this.tasks.forEach(task => {
@@ -334,11 +318,11 @@ export default {
       if (this.tasks.length > 0 && event.altKey) {
         let index = this.lastSelection ? this.lastSelection : 0
         if ([37, 38].includes(event.keyCode)) {
-          index = index - 1 < 0 ? (index = this.tasks.length - 1) : index - 1
+          index = index - 1 < 0 ? this.tasks.length - 1 : index - 1
           this.selectTask({}, index, this.tasks[index])
           this.pauseEvent(event)
         } else if ([39, 40].includes(event.keyCode)) {
-          index = index + 1 >= this.tasks.length ? (index = 0) : index + 1
+          index = index + 1 >= this.tasks.length ? 0 : index + 1
           this.selectTask({}, index, this.tasks[index])
           this.pauseEvent(event)
         }
@@ -397,7 +381,7 @@ export default {
 }
 </script>
 
-<style scoped lang="scss">
+<style lang="scss" scoped>
 .thumbnail {
   min-width: 63px;
   max-width: 63px;

@@ -20,6 +20,7 @@
           @save-clicked="onSaveClicked"
           @annotation-changed="onAnnotationChanged"
           @annotations-refreshed="onAnnotationsRefreshed"
+          @preview-changed="onPreviewChanged"
           v-if="!isPlaylistPage"
         />
       </div>
@@ -85,7 +86,7 @@ export default {
     return {
       previewFileMap: new Map(),
       previewFileEntityMap: new Map(),
-      currentEntities: {},
+      currentEntities: [],
       currentPlaylist: {
         id: 'temp',
         name: 'Temporary playlist',
@@ -169,12 +170,24 @@ export default {
 
   methods: {
     ...mapActions([
+      'changePlaylistPreview',
       'editPlaylist',
       'loadPlaylists',
       'loadTempPlaylist',
       'newPlaylist',
       'updatePreviewAnnotation'
     ]),
+
+    /* When a preview is modified, the change is persisted */
+    async onPreviewChanged({ entity, previewFileId, previousPreviewFileId }) {
+      await this.changePlaylistPreview({
+        playlist: this.currentPlaylist,
+        entity,
+        previewFileId,
+        previousPreviewFileId,
+        remote: false
+      })
+    },
 
     onAnnotationChanged({ preview, additions, deletions, updates }) {
       const taskId = preview.task_id
@@ -209,10 +222,11 @@ export default {
             this.previewFileMap.set(previewFile.id, previewFile)
           })
         })
-        entityMap[entity.id] = entity
+        entityMap[entity.id + '-' + entity.preview_file_id] = entity
       })
+      this.$store.commit('SET_PLAYLIST_ENTRY_MAP', entityMap)
       this.currentPlaylist.shots = Object.values(entityMap)
-      this.currentEntities = entityMap
+      this.currentEntities = Object.values(entityMap)
     },
 
     convertEntityToPlaylistFormat(entityInfo) {
@@ -289,7 +303,7 @@ export default {
       this.modals.edit = true
     },
 
-    savePlaylist(form) {
+    async savePlaylist(form) {
       const newPlaylist = {
         name: form.name,
         production_id: this.currentProduction.id,
@@ -303,39 +317,39 @@ export default {
       }
       this.errors.edit = false
       this.loading.edit = true
-      this.newPlaylist(newPlaylist)
-        .then(playlist => {
-          Object.assign(this.currentPlaylist, {
-            id: playlist.id,
-            name: playlist.name,
-            for_client: playlist.for_client,
-            for_entity: playlist.for_entity,
-            is_for_all: playlist.is_for_all
-          })
-          this.editPlaylist({
-            data: this.currentPlaylist,
-            callback: err => {
-              if (err) {
-                this.errors.edit = true
-              } else {
-                this.modals.edit = false
-              }
-              this.loading.edit = false
-              this.loadPlaylists({})
-            }
-          })
+      try {
+        const playlist = await this.newPlaylist(newPlaylist)
+        Object.assign(this.currentPlaylist, {
+          id: playlist.id,
+          name: playlist.name,
+          for_client: playlist.for_client,
+          for_entity: playlist.for_entity,
+          is_for_all: playlist.is_for_all
         })
-        .catch(err => {
-          console.error(err)
-          this.errors.edit = true
+        const playlistToSave = { ...this.currentPlaylist }
+        playlistToSave.shots = this.currentPlaylist.shots.map(shot => {
+          return {
+            entity_id: shot.id,
+            preview_file_id: shot.preview_file_id
+          }
         })
+        await this.editPlaylist({
+          data: playlistToSave
+        })
+        this.modals.edit = false
+        this.loadPlaylists({})
+      } catch (err) {
+        console.error(err)
+        this.errors.edit = true
+        this.loading.edit = false
+      }
     }
   },
 
   watch: {
     active() {
       if (this.active) {
-        this.currentEntities = {}
+        this.currentEntities = []
         this.previewFileMap = new Map()
         this.previewFileEntityMap = new Map()
         this.isLoading = true
@@ -349,7 +363,7 @@ export default {
       } else {
         this.playlistPlayer.pause()
         this.playlistPlayer.clearCanvas()
-        this.currentEntities = {}
+        this.currentEntities = []
       }
     }
   }

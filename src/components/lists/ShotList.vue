@@ -94,7 +94,11 @@
             <th
               scope="col"
               class="description selectable"
-              v-if="!isCurrentUserClient && isShowInfos && isShotDescription"
+              v-if="
+                !isCurrentUserClient &&
+                displaySettings.showInfos &&
+                isShotDescription
+              "
             >
               {{ $t('shots.fields.description') }}
             </th>
@@ -105,7 +109,7 @@
               class="time-spent number-cell"
               v-if="
                 !isCurrentUserClient &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isShotTime &&
                 metadataDisplayHeaders.timeSpent
               "
@@ -120,7 +124,7 @@
               :title="$t('main.estimation')"
               v-if="
                 !isCurrentUserClient &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isShotEstimation &&
                 metadataDisplayHeaders.estimation
               "
@@ -132,7 +136,7 @@
               class="drawings number-cell"
               scope="col"
               v-if="
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isPaperProduction &&
                 metadataDisplayHeaders.drawings
               "
@@ -145,7 +149,7 @@
               scope="col"
               v-if="
                 isFrames &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 !isPaperProduction &&
                 metadataDisplayHeaders.frames
               "
@@ -156,7 +160,11 @@
             <th
               scope="col"
               class="framein number-cell"
-              v-if="isFrameIn && isShowInfos && metadataDisplayHeaders.frameIn"
+              v-if="
+                isFrameIn &&
+                displaySettings.showInfos &&
+                metadataDisplayHeaders.frameIn
+              "
             >
               {{ $t('shots.fields.frame_in') }}
             </th>
@@ -164,7 +172,9 @@
               scope="col"
               class="frameout number-cell"
               v-if="
-                isFrameOut && isShowInfos && metadataDisplayHeaders.frameOut
+                isFrameOut &&
+                displaySettings.showInfos &&
+                metadataDisplayHeaders.frameOut
               "
             >
               {{ $t('shots.fields.frame_out') }}
@@ -173,7 +183,9 @@
             <th
               scope="col"
               class="fps number-cell"
-              v-if="isFps && isShowInfos && metadataDisplayHeaders.fps"
+              v-if="
+                isFps && displaySettings.showInfos && metadataDisplayHeaders.fps
+              "
             >
               {{ $t('shots.fields.fps') }}
             </th>
@@ -182,7 +194,9 @@
               scope="col"
               class="max-retakes number-cell"
               v-if="
-                isMaxRetakes && isShowInfos && metadataDisplayHeaders.maxRetakes
+                isMaxRetakes &&
+                displaySettings.showInfos &&
+                metadataDisplayHeaders.maxRetakes
               "
             >
               {{ $t('shots.fields.max_retakes') }}
@@ -192,13 +206,15 @@
               scope="col"
               class="resolution"
               v-if="
-                isResolution && isShowInfos && metadataDisplayHeaders.resolution
+                isResolution &&
+                displaySettings.showInfos &&
+                metadataDisplayHeaders.resolution
               "
             >
               {{ $t('shots.fields.resolution') }}
             </th>
 
-            <template v-if="isShowInfos">
+            <template v-if="displaySettings.showInfos">
               <metadata-header
                 :key="descriptor.id"
                 :descriptor="descriptor"
@@ -252,14 +268,14 @@
                 }"
                 v-model="metadataDisplayHeaders"
                 v-show="columnSelectorDisplayed"
-                v-if="isShowInfos"
+                v-if="displaySettings.showInfos"
               />
 
               <button-simple
                 class="is-small is-pulled-right mr05"
                 icon="down"
                 @click="toggleColumnSelector"
-                v-if="isShowInfos"
+                v-if="displaySettings.showInfos"
               />
             </th>
           </tr>
@@ -274,9 +290,9 @@
             v-for="(group, k) in displayedShots"
           >
             <tr class="datatable-type-header">
-              <th scope="rowgroup" :colspan="visibleColumns">
+              <th scope="rowgroup">
                 <div
-                  class="datatable-row-header"
+                  class="datatable-row-header pointer"
                   @click="$emit('sequence-clicked', group[0].sequence_name)"
                 >
                   {{ group[0] ? group[0].sequence_name : '' }}
@@ -308,18 +324,22 @@
                   />
                   <entity-thumbnail
                     :entity="shot"
-                    :width="isBigThumbnails ? 150 : 50"
-                    :height="isBigThumbnails ? 100 : 33"
-                    :empty-width="isBigThumbnails ? 150 : 50"
-                    :empty-height="isBigThumbnails ? 100 : 34"
+                    :width="displaySettings.bigThumbnails ? 150 : 50"
+                    :height="displaySettings.bigThumbnails ? 100 : 33"
+                    :empty-width="displaySettings.bigThumbnails ? 150 : 50"
+                    :empty-height="displaySettings.bigThumbnails ? 100 : 34"
                   />
                   <router-link
                     tabindex="-1"
                     :title="shot.full_name"
                     :to="shotPath(shot.id)"
+                    v-if="!isCurrentUserClient"
                   >
                     {{ shot.name }}
                   </router-link>
+                  <template v-else>
+                    {{ shot.name }}
+                  </template>
                 </div>
               </th>
 
@@ -358,9 +378,9 @@
                   :canceled="shot.canceled"
                   :column="taskTypeMap.get(columnId)"
                   :column-y="j"
-                  :contact-sheet="contactSheetMode"
+                  :contact-sheet="displaySettings.contactSheetMode"
                   :entity="shot"
-                  :is-assignees="isShowAssignations"
+                  :is-assignees="displaySettings.showAssignations"
                   :is-casting-ready="isCastingReady(shot, columnId)"
                   :is-static="true"
                   :left="
@@ -386,7 +406,11 @@
                 @description-changed="
                   value => onDescriptionChanged(shot, value)
                 "
-                v-if="!isCurrentUserClient && isShowInfos && isShotDescription"
+                v-if="
+                  !isCurrentUserClient &&
+                  displaySettings.showInfos &&
+                  isShotDescription
+                "
               />
 
               <!-- Fixed attributes -->
@@ -394,7 +418,7 @@
                 class="time-spent selectable number-cell"
                 v-if="
                   !isCurrentUserClient &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   isShotTime &&
                   metadataDisplayHeaders.timeSpent
                 "
@@ -406,7 +430,7 @@
                 class="estimation selectable number-cell"
                 v-if="
                   !isCurrentUserClient &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   isShotEstimation &&
                   metadataDisplayHeaders.estimation
                 "
@@ -415,8 +439,24 @@
               </td>
 
               <td
+                class="drawings number-cell"
+                v-if="
+                  displaySettings.showInfos &&
+                  isPaperProduction &&
+                  metadataDisplayHeaders.drawings
+                "
+              >
+                {{ shot.nb_drawings }}
+              </td>
+
+              <td
                 class="frames number-cell"
-                v-if="isFrames && isShowInfos && metadataDisplayHeaders.frames"
+                v-if="
+                  isFrames &&
+                  !isPaperProduction &&
+                  displaySettings.showInfos &&
+                  metadataDisplayHeaders.frames
+                "
               >
                 <input
                   class="input-editor"
@@ -438,22 +478,24 @@
               </td>
 
               <td
-                class="drawings number-cell"
-                v-if="
-                  isShowInfos &&
-                  isPaperProduction &&
-                  metadataDisplayHeaders.drawings
-                "
-              >
-                {{ shot.nb_drawings }}
-              </td>
-
-              <td
                 class="framein number-cell"
+                :class="{ 'timecode-cell': displaySettings.inOutTimecode }"
                 v-if="
-                  isFrameIn && isShowInfos && metadataDisplayHeaders.frameIn
+                  isFrameIn &&
+                  displaySettings.showInfos &&
+                  metadataDisplayHeaders.frameIn
                 "
               >
+                <span
+                  class="metadata-value selectable"
+                  v-if="displaySettings.inOutTimecode"
+                >
+                  {{
+                    formatToTimecode(
+                      getMetadataFieldValue({ field_name: 'frame_in' }, shot)
+                    )
+                  }}
+                </span>
                 <input
                   class="input-editor"
                   step="1"
@@ -475,7 +517,7 @@
                     event =>
                       onInputKeyUp(event, getIndex(i, k), descriptorLength + 1)
                   "
-                  v-if="isCurrentUserManager"
+                  v-else-if="isCurrentUserManager"
                 />
                 <span class="metadata-value selectable" v-else>
                   {{ getMetadataFieldValue({ field_name: 'frame_in' }, shot) }}
@@ -483,10 +525,23 @@
               </td>
               <td
                 class="frameout number-cell"
+                :class="{ 'timecode-cell': displaySettings.inOutTimecode }"
                 v-if="
-                  isFrameOut && isShowInfos && metadataDisplayHeaders.frameOut
+                  isFrameOut &&
+                  displaySettings.showInfos &&
+                  metadataDisplayHeaders.frameOut
                 "
               >
+                <span
+                  class="metadata-value selectable"
+                  v-if="displaySettings.inOutTimecode"
+                >
+                  {{
+                    formatToTimecode(
+                      getMetadataFieldValue({ field_name: 'frame_out' }, shot)
+                    )
+                  }}
+                </span>
                 <input
                   class="input-editor"
                   step="1"
@@ -508,7 +563,7 @@
                     event =>
                       onInputKeyUp(event, getIndex(i, k), descriptorLength + 2)
                   "
-                  v-if="isCurrentUserManager"
+                  v-else-if="isCurrentUserManager"
                 />
                 <span class="metadata-value selectable" v-else>
                   {{ getMetadataFieldValue({ field_name: 'frame_out' }, shot) }}
@@ -517,7 +572,11 @@
 
               <td
                 class="fps number-cell"
-                v-if="isFps && isShowInfos && metadataDisplayHeaders.fps"
+                v-if="
+                  isFps &&
+                  displaySettings.showInfos &&
+                  metadataDisplayHeaders.fps
+                "
               >
                 <input
                   class="input-editor"
@@ -550,7 +609,7 @@
                 class="max-retakes number-cell"
                 v-if="
                   isMaxRetakes &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   metadataDisplayHeaders.maxRetakes
                 "
               >
@@ -587,7 +646,7 @@
                 class="resolution"
                 v-if="
                   isResolution &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   metadataDisplayHeaders.resolution
                 "
               >
@@ -621,7 +680,7 @@
               </td>
 
               <!-- other metadata cells -->
-              <template v-if="isShowInfos">
+              <template v-if="displaySettings.showInfos">
                 <td
                   class="metadata-descriptor"
                   :title="shot.data ? shot.data[descriptor.field_name] : ''"
@@ -651,7 +710,7 @@
                   :canceled="shot.canceled"
                   :key="`${columnId}-${shot.id}`"
                   :column="taskTypeMap.get(columnId)"
-                  :contact-sheet="contactSheetMode"
+                  :contact-sheet="displaySettings.contactSheetMode"
                   :entity="shot"
                   :task-test="
                     taskMap.get(
@@ -668,7 +727,7 @@
                   "
                   :row-x="getIndex(i, k)"
                   :column-y="j"
-                  :is-assignees="isShowAssignations"
+                  :is-assignees="displaySettings.showAssignations"
                   :is-casting-ready="isCastingReady(shot, columnId)"
                   :casting-title="castingTitle(shot, columnId)"
                   @select="onTaskSelected"
@@ -729,20 +788,30 @@
         {{ displayedShotsDrawings }}
         {{ $tc('main.nb_drawings', displayedShotsDrawings) }}
       </span>
-      <span
-        v-show="displayedShotsTimeSpent > 0 || displayedShotsEstimation > 0"
-      >
+      <span v-if="displayedShotsTimeSpent > 0 || displayedShotsEstimation > 0">
         ({{ formatDuration(displayedShotsTimeSpent) }}
         {{
           isDurationInHours
-            ? $tc('main.hours_spent', displayedShotsTimeSpent)
-            : $tc('main.days_spent', displayedShotsTimeSpent)
+            ? $tc(
+                'main.hours_spent',
+                formatDuration(displayedShotsTimeSpent, false)
+              )
+            : $tc(
+                'main.days_spent',
+                formatDuration(displayedShotsTimeSpent, false)
+              )
         }},
         {{ formatDuration(displayedShotsEstimation) }}
         {{
           isDurationInHours
-            ? $tc('main.hours_estimated', displayedShotsEstimation)
-            : $tc('main.man_days', displayedShotsEstimation)
+            ? $tc(
+                'main.hours_estimated',
+                formatDuration(displayedShotsEstimation, false)
+              )
+            : $tc(
+                'main.man_days',
+                formatDuration(displayedShotsEstimation, false)
+              )
         }})
       </span>
     </p>
@@ -754,6 +823,7 @@ import { mapGetters, mapActions } from 'vuex'
 
 import preferences from '@/lib/preferences'
 import { range } from '@/lib/time'
+import { formatToTimecode } from '@/lib/video'
 
 import { descriptorMixin } from '@/components/mixins/descriptors'
 import { domMixin } from '@/components/mixins/dom'
@@ -801,9 +871,9 @@ export default {
   },
 
   props: {
-    contactSheetMode: {
-      type: Boolean,
-      default: false
+    displaySettings: {
+      type: Object,
+      default: () => ({})
     },
     displayedShots: {
       type: Array,
@@ -874,15 +944,8 @@ export default {
     }
   },
 
-  mounted() {
-    this.stickedColumns =
-      preferences.getObjectPreference(this.localStorageStickKey) || {}
-    this.addEvents(this.domEvents)
-  },
-
   beforeUnmount() {
     this.removeEvents(this.domEvents)
-    document.body.style.cursor = 'default'
   },
 
   computed: {
@@ -912,7 +975,7 @@ export default {
       'isShotEstimation',
       'isShotTime',
       'isShowAssignations',
-      'isShowInfos',
+      'displaySettings.showInfos',
       'isTVShow',
       'nbSelectedTasks',
       'selectedShots',
@@ -952,71 +1015,11 @@ export default {
       return !this.isLoading && !this.isError && this.displayedShotsCount > 0
     },
 
-    visibleColumns() {
-      let count = 2
-      count +=
-        !this.isCurrentUserClient && this.isShowInfos && this.isShotDescription
-          ? 1
-          : 0
-      count += this.visibleMetadataDescriptors.length
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isShotTime &&
-        this.metadataDisplayHeaders.timeSpent
-          ? 1
-          : 0
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isShotEstimation &&
-        this.metadataDisplayHeaders.estimation
-          ? 1
-          : 0
-
-      if (this.isPaperProduction) {
-        count +=
-          this.isShowInfos && this.metadataDisplayHeaders.drawings ? 1 : 0
-      } else {
-        count += this.isShowInfos && this.metadataDisplayHeaders.frames ? 1 : 0
-      }
-      count +=
-        this.isShowInfos &&
-        this.isFrameIn &&
-        this.metadataDisplayHeaders.frameIn
-          ? 1
-          : 0
-      count +=
-        this.isShowInfos &&
-        this.isFrameOut &&
-        this.metadataDisplayHeaders.frameOut
-          ? 1
-          : 0
-      count +=
-        this.isShowInfos && this.isFps && this.metadataDisplayHeaders.fps
-          ? 1
-          : 0
-      count +=
-        this.isShowInfos &&
-        this.isResolution &&
-        this.metadataDisplayHeaders.resolution
-          ? 1
-          : 0
-      count +=
-        this.isShowInfos &&
-        this.isMaxRetakes &&
-        this.metadataDisplayHeaders.max_retakes
-          ? 1
-          : 0
-      count += this.displayedValidationColumns.length
-      return count
-    },
-
     displayedValidationColumns() {
       return this.validationColumns.filter(columnId => {
         return (
           this.shotFilledColumns[columnId] &&
-          (!this.hiddenColumns[columnId] || this.isShowInfos)
+          (!this.hiddenColumns[columnId] || this.displaySettings.showInfos)
         )
       })
     },
@@ -1026,12 +1029,14 @@ export default {
     },
 
     localStorageStickKey() {
-      return `stick-shots-${this.currentProduction.id}`
+      return `stick-shots-${this.currentProduction?.id}`
     }
   },
 
   methods: {
     ...mapActions(['displayMoreShots', 'setShotSelection']),
+
+    formatToTimecode,
 
     isSelected(indexInGroup, groupIndex, columnIndex) {
       const lineIndex = this.getIndex(indexInGroup, groupIndex)
@@ -1111,7 +1116,7 @@ export default {
       const route = {
         name: section,
         params: {
-          production_id: this.currentProduction.id
+          production_id: this.currentProduction?.id
         }
       }
 
@@ -1135,12 +1140,9 @@ export default {
     },
 
     onNbFramesChanged(entry, value) {
-      let shotsToChange = []
-      if (this.selectedShots.has(entry.id)) {
-        shotsToChange = this.selectedShots
-      } else {
-        shotsToChange = [entry]
-      }
+      const shotsToChange = this.selectedShots.has(entry.id)
+        ? this.selectedShots
+        : [entry]
 
       const cleanValue = this.sanitizeIntegerLight(value)
 
@@ -1187,7 +1189,7 @@ export default {
         let offset = this.$refs['th-shot'].clientWidth
         this.offsets = {}
 
-        if (this.isShowInfos) {
+        if (this.displaySettings.showInfos) {
           for (
             let metadataCol = 0;
             metadataCol < this.stickedVisibleMetadataDescriptors.length;
@@ -1287,9 +1289,9 @@ th.actions {
 }
 
 .fps {
-  min-width: 60px;
-  max-width: 60px;
-  width: 60px;
+  min-width: 70px;
+  max-width: 70px;
+  width: 70px;
 }
 
 .resolution {
@@ -1335,6 +1337,13 @@ th.actions {
   width: 70px;
 }
 
+.timecode-cell {
+  min-width: 95px;
+  max-width: 95px;
+  width: 95px;
+  padding: 10px;
+}
+
 td.name {
   font-size: 1.2em;
 }
@@ -1363,10 +1372,6 @@ span.thumbnail-empty {
   padding: 6px;
 }
 
-.datatable-row-header {
-  cursor: pointer;
-}
-
 input[type='number']::-webkit-outer-spin-button,
 input[type='number']::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -1383,5 +1388,9 @@ td.metadata-descriptor {
   height: 3.1rem;
   max-width: 120px;
   padding: 0;
+}
+
+.metadata-value {
+  padding: 0.5rem 0.75rem;
 }
 </style>

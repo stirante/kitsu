@@ -1,5 +1,3 @@
-import async from 'async'
-
 import tasksApi from '@/store/api/tasks'
 import peopleApi from '@/store/api/people'
 import playlistsApi from '@/store/api/playlists'
@@ -313,30 +311,15 @@ const actions = {
     )
   },
 
-  deleteSelectedTasks({ commit, state }) {
-    return new Promise((resolve, reject) => {
-      const selectedTaskIds = Array.from(state.selectedTasks.keys())
-      async.eachSeries(
-        selectedTaskIds,
-        (taskId, next) => {
-          const task = state.taskMap.get(taskId)
-          if (task) {
-            tasksApi.deleteTask(task, err => {
-              if (!err) commit(DELETE_TASK_END, task)
-              next(err)
-            })
-          } else {
-            next()
-          }
-        },
-        err => {
-          if (err) reject(err)
-          else {
-            resolve()
-          }
-        }
-      )
-    })
+  async deleteSelectedTasks({ commit, state }) {
+    const selectedTaskIds = Array.from(state.selectedTasks.keys())
+    for (const taskId of selectedTaskIds) {
+      const task = state.taskMap.get(taskId)
+      if (task) {
+        await tasksApi.deleteTask(task)
+        commit(DELETE_TASK_END, task)
+      }
+    }
   },
 
   deleteAllTasks({}, { projectId, taskTypeId, taskIds }) {
@@ -398,47 +381,22 @@ const actions = {
       })
   },
 
-  changeSelectedPriorities(
-    { commit, state, rootGetters },
-    { priority, callback }
-  ) {
+  async changeSelectedPriorities({ commit, state, rootGetters }, { priority }) {
     const selectedTaskIds = Array.from(state.selectedTasks.keys())
-    async.eachSeries(
-      selectedTaskIds,
-      (taskId, next) => {
-        const task = state.taskMap.get(taskId)
-        const taskType = rootGetters.taskTypeMap.get(task.task_type_id)
+    for (const taskId of selectedTaskIds) {
+      const task = state.taskMap.get(taskId)
+      const taskType = rootGetters.taskTypeMap.get(task.task_type_id)
 
-        if (task && task.priority !== priority) {
-          tasksApi
-            .updateTask(taskId, { priority })
-            .then(task => {
-              commit(EDIT_TASK_END, { task, taskType })
-              next()
-            })
-            .catch(next)
-        } else {
-          next()
-        }
-      },
-      err => {
-        callback(err)
+      if (task && task.priority !== priority) {
+        const updatedTask = await tasksApi.updateTask(taskId, { priority })
+        commit(EDIT_TASK_END, { task: updatedTask, taskType })
       }
-    )
+    }
   },
 
   updateTask({ commit }, { taskId, data }) {
     commit(EDIT_TASK_DATES, { taskId, data })
     return tasksApi.updateTask(taskId, data)
-  },
-
-  deleteTask({ commit }, { task, callback }) {
-    tasksApi.deleteTask(task, err => {
-      if (!err) {
-        commit(DELETE_TASK_END, task)
-      }
-      if (callback) callback(err)
-    })
   },
 
   editTaskComment({ commit }, { taskId, comment }) {
@@ -685,8 +643,20 @@ const actions = {
 
   assignSelectedTasks({ commit, state }, { personId, taskIds }) {
     const selectedTaskIds = taskIds || Array.from(state.selectedTasks.keys())
-    return tasksApi.assignTasks(personId, selectedTaskIds).then(() => {
-      commit(ASSIGN_TASKS, { selectedTaskIds, personId })
+    return tasksApi.assignTasks(personId, selectedTaskIds).then(response => {
+      const successfulTaskIds = response.map(task => task.id)
+      const failedTaskIds = selectedTaskIds.filter(
+        taskId => !successfulTaskIds.includes(taskId)
+      )
+      commit(ASSIGN_TASKS, { taskIds: successfulTaskIds, personId })
+      if (failedTaskIds.length) {
+        const error = new Error(
+          `Failed to assign ${failedTaskIds.length} task(s). Task IDs: ${failedTaskIds.join(', ')}`
+        )
+        error.failedTaskIds = failedTaskIds
+        error.successfulTaskIds = successfulTaskIds
+        throw error
+      }
     })
   },
 
@@ -784,11 +754,10 @@ const actions = {
     return tasksApi.ackComment(comment)
   },
 
-  replyToComment({ commit }, { comment, text }) {
-    return tasksApi.replyToComment(comment, text).then(reply => {
-      commit(ADD_REPLY_TO_COMMENT, { comment, reply })
-      return reply
-    })
+  async replyToComment({ commit }, { comment, text, attachments }) {
+    const reply = await tasksApi.replyToComment(comment, text, attachments)
+    commit(ADD_REPLY_TO_COMMENT, { comment, reply })
+    return reply
   },
 
   deleteReply({ commit }, { comment, reply }) {
@@ -1223,8 +1192,8 @@ const mutations = {
     }
   },
 
-  [ASSIGN_TASKS](state, { selectedTaskIds, personId }) {
-    selectedTaskIds.forEach(taskId => {
+  [ASSIGN_TASKS](state, { taskIds, personId }) {
+    taskIds.forEach(taskId => {
       const task = state.taskMap.get(taskId)
       if (task && !task.assignees.find(assigneeId => assigneeId === personId)) {
         task.assignees.push(personId)
@@ -1233,8 +1202,8 @@ const mutations = {
     })
   },
 
-  [UNASSIGN_TASKS](state, selectedTaskIds) {
-    selectedTaskIds.forEach(taskId => {
+  [UNASSIGN_TASKS](state, taskIds) {
+    taskIds.forEach(taskId => {
       const task = state.taskMap.get(taskId)
       if (task) {
         task.assignees = []
@@ -1326,6 +1295,10 @@ const mutations = {
     if (!comment.replies) comment.replies = []
     if (!comment.replies.find(r => r.id === reply.id)) {
       comment.replies.push(reply)
+      comment.attachment_files = [
+        ...(comment.attachment_files || []),
+        ...(reply.attachment_files || [])
+      ]
     }
   },
 
@@ -1335,6 +1308,7 @@ const mutations = {
   },
 
   [REMOVE_TASK_COMMENT](state, { task, comment }) {
+    if (!state.taskComments[task.id]) return
     state.taskComments[task.id] = state.taskComments[task.id].filter(
       c => c.id !== comment.id
     )

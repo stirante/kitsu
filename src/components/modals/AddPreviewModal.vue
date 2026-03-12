@@ -224,7 +224,7 @@ export default {
     },
 
     reset() {
-      this.previewField.reset()
+      this.previewField?.reset()
       this.forms = []
       this.isWrongDuration = false
     },
@@ -293,6 +293,7 @@ export default {
               const ref = this.$refs[key]
               if (key.startsWith('video-') && ref[0]) {
                 ref[0].onloadedmetadata = () => {
+                  if (!ref[0]) return
                   const frames = Math.round(ref[0].duration * this.fps)
                   if (frames !== this.expectedFrames) {
                     this.isWrongDuration = true

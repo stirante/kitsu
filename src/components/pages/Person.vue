@@ -24,7 +24,7 @@
             :tabs="todoTabs"
           />
 
-          <div ref="search" class="flexrow" v-show="!isActiveTab('calendar')">
+          <div class="flexrow">
             <search-field
               ref="person-tasks-search-field"
               class="search-field flexrow-item"
@@ -33,7 +33,6 @@
               @save="saveSearchQuery"
             />
             <combobox-production
-              v-if="isActiveTab('board')"
               class="flexrow-item production-field"
               :label="$t('main.production')"
               :production-list="productionList"
@@ -77,30 +76,31 @@
 
           <todos-list
             ref="done-list"
-            :tasks="displayedPersonDoneTasks"
-            :is-loading="isTasksLoading"
-            :is-error="isTasksLoadingError"
-            :done="true"
+            done
+            :empty-text="$t('people.no_task_assigned')"
+            :is-loading="isDoneTasksLoading"
+            :is-error="isDoneTasksLoadingError"
             :selection-grid="personTaskSelectionGrid"
+            :tasks="sortedDoneTasks"
             v-else-if="isActiveTab('done')"
           />
 
           <kanban-board
             :is-loading="isTasksLoading"
             :is-error="isTasksLoadingError"
+            :production="selectedProduction"
             :statuses="boardStatuses"
             :tasks="boardTasks"
             :user="user"
-            :production="selectedProduction"
             v-else-if="isActiveTab('board')"
           />
 
           <user-calendar
-            ref="user-calendar"
             class="calendar"
+            :is-loading="isTasksLoading"
             :days-off="daysOff"
-            :tasks="sortedTasks"
-            v-if="isActiveTab('calendar')"
+            :tasks="sortedAllTasks"
+            v-else-if="isActiveTab('calendar')"
           />
 
           <timesheet-list
@@ -109,6 +109,7 @@
             :done-tasks="loggableDoneTasks"
             :is-loading="isTasksLoading"
             :is-error="isTasksLoadingError"
+            :days-off="daysOff"
             :day-off-error="dayOffError"
             :time-spent-map="personTimeSpentMap"
             :time-spent-total="personTimeSpentTotal"
@@ -121,7 +122,7 @@
             v-else-if="isActiveTab('timesheets') && isCurrentUserManager"
           />
 
-          <div v-else-if="isActiveTab('schedule')">
+          <template v-else-if="isActiveTab('schedule')">
             <schedule
               ref="schedule-widget"
               :days-off="daysOff"
@@ -129,7 +130,6 @@
               :end-date="tasksEndDate.clone().add(3, 'months')"
               :hierarchy="scheduleItems"
               :zoom-level="zoomLevel"
-              :height="scheduleHeight"
               :is-loading="isTasksLoading"
               :is-estimation-linked="true"
               :with-milestones="false"
@@ -137,10 +137,13 @@
               @estimation-changed="event => saveTaskScheduleItem(event.item)"
               v-if="scheduleItems.length > 0"
             />
+            <div v-else-if="isTasksLoading">
+              <spinner />
+            </div>
             <div class="has-text-centered" v-else>
               {{ $t('main.empty_schedule') }}
             </div>
-          </div>
+          </template>
         </template>
       </div>
     </div>
@@ -152,16 +155,16 @@
 
 <script>
 import moment from 'moment-timezone'
-import firstBy from 'thenby'
+import { firstBy } from 'thenby'
 import { mapGetters, mapActions } from 'vuex'
 
 import colors from '@/lib/colors'
 import { sortTaskStatuses } from '@/lib/sorting'
 import {
-  daysToMinutes,
-  getBusinessDays,
+  addBusinessDays,
   getFirstStartDate,
   getLastEndDate,
+  minutesToDays,
   parseDate
 } from '@/lib/time'
 
@@ -177,9 +180,10 @@ import RouteSectionTabs from '@/components/widgets/RouteSectionTabs.vue'
 import Schedule from '@/components/widgets/Schedule.vue'
 import SearchField from '@/components/widgets/SearchField.vue'
 import SearchQueryList from '@/components/widgets/SearchQueryList.vue'
+import Spinner from '@/components/widgets/Spinner.vue'
+import TaskInfo from '@/components/sides/TaskInfo.vue'
 import TimesheetList from '@/components/lists/TimesheetList.vue'
 import TodosList from '@/components/lists/TodosList.vue'
-import TaskInfo from '@/components/sides/TaskInfo.vue'
 import UserCalendar from '@/components/widgets/UserCalendar.vue'
 
 export default {
@@ -197,6 +201,7 @@ export default {
     Schedule,
     SearchField,
     SearchQueryList,
+    Spinner,
     TaskInfo,
     TimesheetList,
     TodosList,
@@ -210,6 +215,8 @@ export default {
       daysOff: [],
       dayOffError: false,
       init: false,
+      isDoneTasksLoading: false,
+      isDoneTasksLoadingError: false,
       isTasksLoading: false,
       isTasksLoadingError: false,
       loading: {
@@ -217,7 +224,6 @@ export default {
       },
       person: null,
       productionId: undefined,
-      scheduleHeight: 0,
       selectedDate: moment().format('YYYY-MM-DD'),
       sortOptions: [
         'entity_name',
@@ -239,25 +245,19 @@ export default {
   },
 
   async mounted() {
+    this.productionId = this.$route.query.productionId || undefined
+
     this.updateActiveTab()
     await this.loadPerson(this.$route.params.person_id)
-    if (!this.person) {
-      return
-    }
-    setTimeout(() => {
-      this.searchField?.focus()
-      this.$refs['schedule-widget']?.scrollToDate(this.tasksStartDate)
-    }, 300)
-    window.addEventListener('resize', this.resetScheduleHeight)
-
     this.setSearchFromUrl()
     this.onSearchChange()
+
+    this.$refs['schedule-widget']?.scrollToDate(this.tasksStartDate)
 
     this.init = true
   },
 
   afterDestroy() {
-    window.removeEventListener('resize', this.resetScheduleHeight)
     this.$store.commit('LOAD_PERSON_TASKS_END', {
       tasks: [],
       userFilters: {},
@@ -302,13 +302,13 @@ export default {
     },
 
     loggablePersonTasks() {
-      return this.displayedPersonTasks.filter(task => {
+      return this.sortedTasks.filter(task => {
         return this.taskTypeMap.get(task.task_type_id).allow_timelog
       })
     },
 
     loggableDoneTasks() {
-      return this.displayedPersonDoneTasks.filter(task => {
+      return this.sortedDoneTasks.filter(task => {
         return this.taskTypeMap.get(task.task_type_id).allow_timelog
       })
     },
@@ -326,59 +326,30 @@ export default {
     },
 
     sortedTasks() {
-      const isName = this.currentSort === 'entity_name'
-      const isPriority = this.currentSort === 'priority'
-      const isDueDate = this.currentSort === 'due_date'
-      const isStartDate = this.currentSort === 'start_date'
-      const tasks = [...this.displayedPersonTasks]
-      if (isName) {
-        return tasks.sort(
-          firstBy('project_name')
-            .thenBy('task_type_name')
-            .thenBy('full_entity_name')
-        )
-      } else if (isPriority) {
-        return tasks.sort(
-          firstBy('priority', -1)
-            .thenBy((a, b) => {
-              if (!a.due_date) return 1
-              else if (!b.due_date) return -1
-              else return a.due_date.localeCompare(b.due_date)
-            })
-            .thenBy('project_name')
-            .thenBy('task_type_name')
-            .thenBy('entity_name')
-        )
-      } else if (isDueDate) {
-        return tasks.sort(
-          firstBy((a, b) => {
-            if (!a.due_date) return 1
-            else if (!b.due_date) return -1
-            else return a.due_date.localeCompare(b.due_date)
-          })
-            .thenBy('project_name')
-            .thenBy('task_type_name')
-            .thenBy('entity_name')
-        )
-      } else if (isStartDate) {
-        return tasks.sort(
-          firstBy((a, b) => {
-            if (!a.start_date) return 1
-            else if (!b.start_date) return -1
-            else return a.start_date.localeCompare(b.start_date)
-          })
-            .thenBy('project_name')
-            .thenBy('task_type_name')
-            .thenBy('entity_name')
-        )
-      } else {
-        return tasks.sort(
-          firstBy(this.currentSort, -1)
-            .thenBy('project_name')
-            .thenBy('task_type_name')
-            .thenBy('entity_name')
-        )
+      let tasks = this.sortTasks([...this.displayedPersonTasks])
+      if (this.productionId) {
+        tasks = tasks.filter(task => task.project_id === this.productionId)
       }
+      return tasks
+    },
+
+    sortedDoneTasks() {
+      let tasks = this.sortTasks([...this.displayedPersonDoneTasks])
+      if (this.productionId) {
+        tasks = tasks.filter(task => task.project_id === this.productionId)
+      }
+      return tasks
+    },
+
+    sortedAllTasks() {
+      let tasks = this.sortTasks([
+        ...this.displayedPersonTasks,
+        ...this.displayedPersonDoneTasks
+      ])
+      if (this.productionId) {
+        tasks = tasks.filter(task => task.project_id === this.productionId)
+      }
+      return tasks
     },
 
     tasksStartDate() {
@@ -403,7 +374,7 @@ export default {
 
     scheduleItems() {
       const rootMap = new Map()
-      this.sortedTasks.forEach(task => {
+      this.sortedAllTasks.forEach(task => {
         if (!rootMap.get(task.project_id)) {
           const project = this.productionMap.get(task.project_id)
           const rootElement = this.buildProjectScheduleItem(project)
@@ -424,8 +395,7 @@ export default {
           rootEndDate = getLastEndDate(rootElement.children)
         }
         rootElement.children.forEach(task => {
-          const estimation = this.formatDuration(task.estimation)
-          if (estimation) manDays += task.estimation
+          if (task.estimation) manDays += task.estimation
         })
         Object.assign(rootElement, {
           startDate: rootStartDate,
@@ -438,7 +408,7 @@ export default {
     },
 
     boardTasks() {
-      const tasks = this.sortedTasks.concat(this.displayedPersonDoneTasks)
+      const tasks = this.sortedAllTasks
       if (this.selectedProduction) {
         return tasks.filter(
           task => task.project_id === this.selectedProduction.id
@@ -515,7 +485,7 @@ export default {
         },
         {
           label: `${this.$t('tasks.validated')} (${
-            this.displayedPersonDoneTasks.length
+            this.isDoneTasksLoading ? '…' : this.displayedPersonDoneTasks.length
           })`,
           name: 'done'
         },
@@ -531,6 +501,7 @@ export default {
     ...mapActions([
       'clearSelectedTasks',
       'loadAggregatedPersonDaysOff',
+      'loadPersonDoneTasks',
       'loadPersonTasks',
       'loadPersonTimeSpents',
       'setPersonTasksSearch',
@@ -543,25 +514,66 @@ export default {
       'updateTask'
     ]),
 
+    sortTasks(tasks) {
+      const isName = this.currentSort === 'entity_name'
+      const isPriority = this.currentSort === 'priority'
+      const isDueDate = this.currentSort === 'due_date'
+      const isStartDate = this.currentSort === 'start_date'
+
+      if (isName) {
+        return tasks.sort(
+          firstBy('project_name')
+            .thenBy('task_type_name')
+            .thenBy('full_entity_name')
+        )
+      } else if (isPriority) {
+        return tasks.sort(
+          firstBy('priority', -1)
+            .thenBy((a, b) => {
+              if (!a.due_date) return 1
+              else if (!b.due_date) return -1
+              else return a.due_date.localeCompare(b.due_date)
+            })
+            .thenBy('project_name')
+            .thenBy('task_type_name')
+            .thenBy('entity_name')
+        )
+      } else if (isDueDate) {
+        return tasks.sort(
+          firstBy((a, b) => {
+            if (!a.due_date) return 1
+            else if (!b.due_date) return -1
+            else return a.due_date.localeCompare(b.due_date)
+          })
+            .thenBy('project_name')
+            .thenBy('task_type_name')
+            .thenBy('entity_name')
+        )
+      } else if (isStartDate) {
+        return tasks.sort(
+          firstBy((a, b) => {
+            if (!a.start_date) return 1
+            else if (!b.start_date) return -1
+            else return a.start_date.localeCompare(b.start_date)
+          })
+            .thenBy('project_name')
+            .thenBy('task_type_name')
+            .thenBy('entity_name')
+        )
+      } else {
+        return tasks.sort(
+          firstBy(this.currentSort, -1)
+            .thenBy('project_name')
+            .thenBy('task_type_name')
+            .thenBy('entity_name')
+        )
+      }
+    },
+
     onAssignation(eventData) {
       if (this.person.id === eventData.person_id) {
         this.loadPerson(this.person.id)
       }
-    },
-
-    resetScheduleHeight() {
-      this.$nextTick(() => {
-        if (this.isActiveTab('schedule')) {
-          const pageHeight = this.$refs.page?.offsetHeight || 0
-          const headerHeight = this.$refs.header?.offsetHeight || 0
-          const tabsHeight = this.$refs.tabs?.offsetHeight || 0
-          const searchHeight = this.$refs.search?.offsetHeight || 0
-          const queryHeight = this.$refs.query?.offsetHeight || 0
-          this.scheduleHeight =
-            pageHeight - headerHeight - tabsHeight - searchHeight - queryHeight
-          this.$refs['schedule-widget']?.resetScheduleSize()
-        }
-      })
     },
 
     buildProjectScheduleItem(project) {
@@ -643,33 +655,42 @@ export default {
         return
       }
 
-      if (this.person.is_bot || !this.isCurrentUserAllowed) {
-        return
-      }
+      if (this.person.is_bot || !this.isCurrentUserAllowed) return
 
       this.isTasksLoading = true
+      this.isDoneTasksLoading = true
       this.isTasksLoadingError = false
 
-      await this.loadPersonTasks({
-        personId: this.person.id,
-        date: this.selectedDate
-      })
-        .then(() => {
-          setTimeout(() => {
-            this.$nextTick(() => {
-              this.taskList?.setScrollPosition(this.personTasksScrollPosition)
-            })
-            this.resizeHeaders()
-          }, 0)
+      try {
+        await this.loadPersonTasks({
+          personId: this.person.id,
+          date: this.selectedDate
         })
-        .catch(err => {
-          console.error(err)
-          this.isTasksLoadingError = true
-        })
-        .finally(() => {
-          this.isTasksLoading = false
-        })
+        setTimeout(() => {
+          this.$nextTick(() => {
+            this.taskList?.setScrollPosition(this.personTasksScrollPosition)
+          })
+          this.resizeHeaders()
+        }, 0)
 
+        this.isTasksLoading = false
+        try {
+          await this.loadPersonDoneTasks(this.person.id)
+          this.isDoneTasksLoading = false
+        } catch (error) {
+          this.isDoneTasksLoadingError = true
+          this.isDoneTasksLoading = false
+        }
+      } catch (error) {
+        this.isTasksLoading = false
+        this.isTasksLoadingError = true
+      }
+
+      this.loadDaysOff()
+    },
+
+    async loadDaysOff() {
+      const personId = this.person.id
       try {
         this.daysOff = await this.loadAggregatedPersonDaysOff({ personId })
       } catch (error) {
@@ -724,21 +745,19 @@ export default {
         ? currentSection
         : 'todos'
 
-      if (this.activeTab === 'board') {
-        const currentProduction = this.userOpenProductions.find(
-          ({ id }) => id === this.$route.query.productionId
-        )
-        if (currentProduction) {
-          this.productionId = currentProduction.id
-        } else {
-          this.$router.push({
-            query: {
-              productionId: this.productionId,
-              section: this.activeTab,
-              search: this.$route.query.search
-            }
-          })
-        }
+      const currentProduction = this.userOpenProductions.find(
+        ({ id }) => id === this.$route.query.productionId
+      )
+      if (currentProduction) {
+        this.productionId = currentProduction.id
+      } else {
+        this.$router.push({
+          query: {
+            ...this.$route.query,
+            productionId: this.productionId,
+            section: this.activeTab
+          }
+        })
       }
 
       this.clearSelectedTasks()
@@ -766,27 +785,35 @@ export default {
       } catch (error) {
         this.dayOffError = error.body?.message || true
       }
+      await this.loadDaysOff()
     },
 
-    async onUnsetDayOff() {
+    async onUnsetDayOff(dayOff) {
       this.dayOffError = false
       try {
-        await this.unsetDayOff()
+        await this.unsetDayOff(dayOff)
         this.$refs['timesheet-list']?.closeUnsetDayOffModal()
       } catch (error) {
         this.dayOffError = error.body?.message || true
       }
+      await this.loadDaysOff()
     },
 
     saveTaskScheduleItem(item) {
-      const daysLength = getBusinessDays(item.startDate, item.endDate)
-      const estimation = daysToMinutes(this.organisation, daysLength)
-      item.man_days = estimation
+      if (item.estimation) {
+        item.endDate = addBusinessDays(
+          item.startDate,
+          Math.ceil(minutesToDays(this.organisation, item.estimation)) - 1,
+          item.parentElement.daysOff
+        )
+      }
+      item.man_days = item.estimation || 0
+
       if (item.startDate && item.endDate) {
         this.updateTask({
           taskId: item.id,
           data: {
-            estimation,
+            estimation: item.estimation,
             start_date: item.startDate.format('YYYY-MM-DD'),
             due_date: item.endDate.format('YYYY-MM-DD')
           }
@@ -829,7 +856,6 @@ export default {
     },
 
     activeTab() {
-      this.resetScheduleHeight()
       this.$nextTick(() => {
         this.$refs['schedule-widget']?.scrollToDate(this.tasksStartDate)
       })
@@ -842,8 +868,8 @@ export default {
     productionId() {
       this.$router.push({
         query: {
-          productionId: this.productionId,
-          tab: this.activeTab
+          ...this.$route.query,
+          productionId: this.productionId
         }
       })
     },

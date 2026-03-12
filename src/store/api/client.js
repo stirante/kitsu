@@ -4,7 +4,7 @@ import errors from '@/lib/errors'
 const client = {
   get(path, callback) {
     superagent.get(path).end((err, res) => {
-      // if (res?.statusCode === 401) return errors.backToLogin()
+      if (res?.statusCode === 401) return errors.backToLogin()
       callback(err, res?.body)
     })
   },
@@ -37,7 +37,16 @@ const client = {
   },
 
   pget(path) {
-    return superagent.get(path).then(res => res?.body)
+    return superagent
+      .get(path)
+      .then(res => res?.body)
+      .catch(err => {
+        if (err?.response?.status === 401) {
+          errors.backToLogin()
+          return
+        }
+        throw err
+      })
   },
 
   ppost(path, data) {
@@ -148,8 +157,11 @@ const client = {
     return client.pget(path)
   },
 
-  getEvents(after, before) {
-    const path = `/api/data/events/last?after=${after}&before=${before}&limit=100000`
+  getEvents(after, before, limit, lastEventId = null) {
+    let path = `/api/data/events/last?after=${after}&before=${before}&limit=${limit}`
+    if (lastEventId) {
+      path += `&cursor_event_id=${lastEventId}`
+    }
     return client.pget(path)
   },
 

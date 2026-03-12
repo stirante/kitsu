@@ -5,15 +5,18 @@
     <div class="modal-content">
       <form @submit.prevent="emitForm('confirm')" class="box">
         <h1 class="title" v-if="personToEdit.id !== undefined">
-          {{ $t('people.edit_title') }} {{ personToEdit.full_name }}
+          {{ isBot ? $t('bots.edit_title') : $t('people.edit_title') }}
+          {{ personToEdit.full_name }}
         </h1>
         <h1 class="title" v-else>
-          {{ $t(isBot ? 'bots.new_bot' : 'people.new_person') }}
+          {{ isBot ? $t('bots.new_bot') : $t('people.new_person') }}
         </h1>
         <text-field
           ref="name-field"
           :errored="form.first_name && !isValidName"
-          :label="$t(isBot ? 'bots.fields.name' : 'people.fields.first_name')"
+          :label="
+            isBot ? $t('bots.fields.name') : $t('people.fields.first_name')
+          "
           :disabled="personToEdit.is_generated_from_ldap"
           v-model.trim="form.first_name"
         />
@@ -26,6 +29,7 @@
         <text-field
           type="email"
           :errored="form.email && !isValidEmail"
+          :error-text="isUniqEmail ? '' : $t('people.email_exist_error')"
           :label="$t('people.fields.email')"
           :disabled="personToEdit.is_generated_from_ldap"
           v-model.trim="form.email"
@@ -82,7 +86,11 @@
             class="empty mb1"
             v-if="form.departments && form.departments.length === 0"
           >
-            {{ $t('people.departments_empty') }}
+            {{
+              isBot
+                ? $t('bots.departments_empty')
+                : $t('people.departments_empty')
+            }}
           </p>
           <div
             class="department-element mb1 mt05"
@@ -163,7 +171,15 @@
             :disabled="!isValidForm"
             type="submit"
           >
-            {{ !isEditing ? $t('people.create') : $t('people.confirm_edit') }}
+            {{
+              !isEditing
+                ? isBot
+                  ? $t('bots.create')
+                  : $t('people.create')
+                : isBot
+                  ? $t('bots.confirm_edit')
+                  : $t('people.confirm_edit')
+            }}
           </button>
           <button
             class="button is-link flexrow-item"
@@ -282,6 +298,9 @@ export default {
         email: '',
         phone: '',
         role: 'user',
+        position: 'artist',
+        seniority: 'mid',
+        daily_salary: 0,
         contract_type: 'open-ended',
         active: 'true',
         departments: [],
@@ -314,7 +333,7 @@ export default {
   },
 
   computed: {
-    ...mapGetters(['departments', 'departmentMap', 'people', 'user']),
+    ...mapGetters(['departments', 'departmentMap', 'people']),
 
     selectableDepartments() {
       return this.departments.filter(
@@ -346,13 +365,16 @@ export default {
         return true
       }
 
-      const isExist = this.people.some(
+      return this.isUniqEmail
+    },
+
+    isUniqEmail() {
+      return !this.people.some(
         person =>
           !person.is_bot &&
           person.email === this.form.email &&
           (!this.personToEdit || this.personToEdit.email !== person.email)
       )
-      return !isExist
     },
 
     isValidForm() {
@@ -422,16 +444,21 @@ export default {
   },
 
   watch: {
-    personToEdit() {
-      this.resetForm()
+    personToEdit: {
+      immediate: true,
+      handler() {
+        this.resetForm()
+      }
     },
 
-    active() {
-      if (this.active) {
-        this.resetForm()
-        setTimeout(() => {
-          this.$refs['name-field'].focus()
-        }, 100)
+    active: {
+      immediate: true,
+      handler() {
+        if (this.active) {
+          setTimeout(() => {
+            this.$refs['name-field']?.focus()
+          }, 100)
+        }
       }
     }
   }

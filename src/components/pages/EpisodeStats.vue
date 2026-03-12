@@ -4,8 +4,8 @@
       <search-field
         class="flexrow-item mt1"
         ref="episode-search-field"
-        @change="onSearchChange"
         placeholder="ex: e01 s01, anim=wip"
+        @change="onSearchChange"
       />
       <combobox
         class="mb0 flexrow-item"
@@ -61,8 +61,6 @@
           ? displayedEpisodes.filter(e => e.status === 'running')
           : displayedEpisodes
       "
-      :episode-stats="episodeStats"
-      :episode-retakes-stats="episodeRetakeStats"
       :is-loading="isLoading"
       :is-error="isLoadingError"
       :show-all="episodeSearchText.length === 0"

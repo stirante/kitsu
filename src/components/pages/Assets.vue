@@ -18,13 +18,6 @@
               icon="filter"
               @click="modals.isBuildFilterDisplayed = true"
             />
-            <button-simple
-              class="flexrow-item"
-              icon="assets"
-              :is-on="showSharedAssets"
-              :title="$t('breakdown.show_library')"
-              @click="showSharedAssets = !showSharedAssets"
-            />
             <div class="flexrow-item filler"></div>
             <div class="flexrow flexrow-item" v-if="!isCurrentUserClient">
               <combobox-department
@@ -35,16 +28,12 @@
                 v-model="selectedDepartment"
                 v-if="departments.length > 0"
               />
-              <button-simple
+              <combobox-display-options
                 class="flexrow-item"
-                icon="grid"
-                :is-on="contactSheetMode"
-                :title="$t('tasks.show_contact_sheet')"
-                @click="contactSheetMode = !contactSheetMode"
+                :type="type"
+                :has-linked-assets="isTVShow"
+                v-model="displaySettings"
               />
-              <show-assignations-button class="flexrow-item" />
-              <show-infos-button class="flexrow-item" />
-              <big-thumbnails-button class="flexrow-item" />
             </div>
             <div class="flexrow" v-if="isCurrentUserManager">
               <button-simple
@@ -92,12 +81,8 @@
         />
         <asset-list
           ref="asset-list"
-          :contact-sheet-mode="contactSheetMode"
-          :displayed-assets="
-            showSharedAssets
-              ? displayedAssetsByType
-              : displayedAssetsByTypeWithoutShared
-          "
+          :displayed-assets="displayedAssetsByTypeFiltered"
+          :display-settings="displaySettings"
           :is-loading="isAssetsLoading || initialLoading"
           :is-error="isAssetsLoadingError"
           :department-filter="departmentFilter"
@@ -246,13 +231,14 @@
 
     <add-thumbnails-modal
       ref="add-thumbnails-modal"
+      active
       entity-type="Asset"
       parent="assets"
-      :active="modals.isAddThumbnailsDisplayed"
       :is-loading="loading.addThumbnails"
       :is-error="errors.addThumbnails"
       @confirm="confirmAddThumbnails"
       @cancel="hideAddThumbnailsModal"
+      v-if="modals.isAddThumbnailsDisplayed"
     />
 
     <build-filter-modal
@@ -279,10 +265,10 @@ import { entitiesMixin } from '@/components/mixins/entities'
 import AssetList from '@/components/lists/AssetList.vue'
 import AddMetadataModal from '@/components/modals/AddMetadataModal.vue'
 import AddThumbnailsModal from '@/components/modals/AddThumbnailsModal.vue'
-import BigThumbnailsButton from '@/components/widgets/BigThumbnailsButton.vue'
 import BuildFilterModal from '@/components/modals/BuildFilterModal.vue'
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
 import ComboboxDepartment from '@/components/widgets/ComboboxDepartment.vue'
+import ComboboxDisplayOptions from '@/components/widgets/ComboboxDisplayOptions.vue'
 import CreateTasksModal from '@/components/modals/CreateTasksModal.vue'
 import DeleteModal from '@/components/modals/DeleteModal.vue'
 import EditAssetModal from '@/components/modals/EditAssetModal.vue'
@@ -292,8 +278,6 @@ import HardDeleteModal from '@/components/modals/HardDeleteModal.vue'
 import SearchField from '@/components/widgets/SearchField.vue'
 import SearchQueryList from '@/components/widgets/SearchQueryList.vue'
 import SortingInfo from '@/components/widgets/SortingInfo.vue'
-import ShowAssignationsButton from '@/components/widgets/ShowAssignationsButton.vue'
-import ShowInfosButton from '@/components/widgets/ShowInfosButton.vue'
 import TaskInfo from '@/components/sides/TaskInfo.vue'
 
 export default {
@@ -305,10 +289,10 @@ export default {
     AssetList,
     AddMetadataModal,
     AddThumbnailsModal,
-    BigThumbnailsButton,
     BuildFilterModal,
     ButtonSimple,
     ComboboxDepartment,
+    ComboboxDisplayOptions,
     CreateTasksModal,
     DeleteModal,
     EditAssetModal,
@@ -317,8 +301,6 @@ export default {
     ImportRenderModal,
     SearchField,
     SearchQueryList,
-    ShowAssignationsButton,
-    ShowInfosButton,
     SortingInfo,
     TaskInfo
   },
@@ -342,8 +324,15 @@ export default {
       deleteAllTasksLockText: null,
       descriptorToEdit: {},
       departmentFilter: [],
-      showSharedAssets: true,
-      optionalColumns: ['Description', 'Ready for'],
+      displaySettings: {
+        bigThumbnails: false,
+        contactSheetMode: false,
+        showAssignations: true,
+        showInfos: true,
+        showSharedAssets: true,
+        showLinkedAssets: true
+      },
+      optionalColumns: ['Description', 'Ready for', 'Resolution'],
       pageName: 'Assets',
       parsedCSV: [],
       selectedDepartment: 'ALL',
@@ -402,14 +391,11 @@ export default {
   },
 
   mounted() {
-    let searchQuery = ''
-    if (this.assetSearchText.length > 0) {
+    const searchQuery = this.$route.query.search ?? ''
+    if (this.assetSearchText) {
       this.$refs['asset-search-field']?.setValue(this.assetSearchText)
     }
-    if (this.$route.query.search && this.$route.query.search.length > 0) {
-      searchQuery = `${this.$route.query.search}`
-    }
-    this.$refs['asset-list'].setScrollPosition(this.assetListScrollPosition)
+    this.$refs['asset-list']?.setScrollPosition(this.assetListScrollPosition)
     const finalize = () => {
       if (this.$refs['asset-list']) {
         this.searchField.setValue(searchQuery)
@@ -474,6 +460,7 @@ export default {
       'isCurrentUserClient',
       'isCurrentUserManager',
       'isTVShow',
+      'isAssetResolution',
       'openProductions',
       'productionAssetTaskTypes',
       'selectedAssets',
@@ -489,10 +476,31 @@ export default {
       return this.$refs['asset-search-field']
     },
 
-    displayedAssetsByTypeWithoutShared() {
-      return this.displayedAssetsByType.map(type =>
-        type.filter(asset => !asset.shared)
-      )
+    // Filter the displayed assets by the display settings
+    displayedAssetsByTypeFiltered() {
+      if (
+        this.displaySettings.showSharedAssets &&
+        this.displaySettings.showLinkedAssets
+      ) {
+        return this.displayedAssetsByType
+      }
+      const episodeId = this.currentEpisode?.id
+
+      return this.displayedAssetsByType.map(typeList => {
+        return typeList.filter(asset => {
+          if (!this.displaySettings.showSharedAssets && asset.shared) {
+            return false
+          }
+          if (
+            this.isTVShow &&
+            !this.displaySettings.showLinkedAssets &&
+            !['all', asset.episode_id || 'main'].includes(episodeId)
+          ) {
+            return false
+          }
+          return true
+        })
+      })
     },
 
     filteredAssets() {
@@ -582,6 +590,18 @@ export default {
       'uploadAssetFile'
     ]),
 
+    setOptionalImportColumns() {
+      const columns = [
+        this.$t('assets.fields.description'),
+        this.$t('assets.fields.ready_for'),
+        this.$t('shots.fields.resolution')
+      ]
+      if (this.isPaperProduction) {
+        columns.splice(1, 1)
+      }
+      this.optionalColumns = columns
+    },
+
     showNewModal() {
       this.assetToEdit = {}
       this.modals.isNewDisplayed = true
@@ -634,7 +654,7 @@ export default {
         .then(form => {
           this.loading.edit = false
           this.modals.isNewDisplayed = false
-          this.applySearchFromUrl()
+          this.applySearchFromUrl(false)
         })
         .catch(err => {
           console.error(err)
@@ -882,7 +902,7 @@ export default {
 
     confirmAddThumbnails(forms) {
       const addPreview = form => {
-        this.addThumbnailsModal.markLoading(form.task.entity_id)
+        this.addThumbnailsModal?.markLoading(form.task.entity_id)
         return this.commentTaskWithPreview({
           taskId: form.task.id,
           commentText: '',
@@ -897,11 +917,9 @@ export default {
             })
           })
           .then(() => {
-            this.addThumbnailsModal.markUploaded(form.task.entity_id)
-            return Promise.resolve()
+            this.addThumbnailsModal?.markUploaded(form.task.entity_id)
           })
       }
-
       this.loading.addThumbnails = true
       func.runPromiseMapAsSeries(forms, addPreview).then(() => {
         this.loading.addThumbnails = false
@@ -956,6 +974,9 @@ export default {
         if (this.isAssetEstimation) {
           headers.push(this.$t('main.estimation_short'))
         }
+        if (this.isAssetResolution) {
+          headers.push(this.$t('shots.fields.resolution'))
+        }
         this.assetValidationColumns.forEach(taskTypeId => {
           headers.push(this.taskTypeMap.get(taskTypeId).name)
           headers.push('Assignations')
@@ -979,7 +1000,7 @@ export default {
         [fieldName]: value
       }
       await this.editAsset(data)
-      this.applySearchFromUrl()
+      this.applySearchFromUrl(false)
     },
 
     async onMetadataChanged({ entry, descriptor, value }) {
@@ -990,12 +1011,12 @@ export default {
         }
       }
       await this.editAsset(data)
-      this.applySearchFromUrl()
+      this.applySearchFromUrl(false)
     },
 
     async onAssetChanged(asset) {
       await this.editAsset(asset)
-      this.applySearchFromUrl()
+      this.applySearchFromUrl(false)
     },
 
     reset() {
@@ -1009,6 +1030,7 @@ export default {
 
   watch: {
     currentProduction() {
+      this.setOptionalImportColumns()
       this.$refs['asset-search-field']?.setValue('')
       this.$store.commit('SET_ASSET_LIST_SCROLL_POSITION', 0)
       this.initialLoading = true

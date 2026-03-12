@@ -383,16 +383,16 @@ export default {
     },
 
     resetSize() {
-      let { width, height } = this.getDimensions()
-      if (height > 0) {
+      const { height: initialHeight } = this.getDimensions()
+      if (initialHeight > 0) {
         this.container.style.height = this.defaultHeight + 'px'
-        this.video.style.height = height + 'px'
+        this.video.style.height = initialHeight + 'px'
         const videoPosition = this.video.getBoundingClientRect()
         const containerPosition = this.container.getBoundingClientRect()
         const top = videoPosition.top - containerPosition.top
         const left = videoPosition.left - containerPosition.left
-        width = videoPosition.width
-        height = videoPosition.height
+        const width = videoPosition.width
+        const height = videoPosition.height
 
         if (
           !this.previousDimensions ||
@@ -410,12 +410,7 @@ export default {
     },
 
     getFrameFromPlayer() {
-      let currentTimeRaw = 0
-      if (this.video) {
-        currentTimeRaw = this.video.currentTime
-      } else {
-        currentTimeRaw = 0
-      }
+      const currentTimeRaw = this.video ? this.video.currentTime : 0
       if (currentTimeRaw === 0) {
         return 0
       }
@@ -511,6 +506,18 @@ export default {
     resumePanZoom() {
       if (this.panzoomInstance) {
         this.panzoomInstance.resume()
+      }
+    },
+
+    setSpeed(rate) {
+      if (this.video) {
+        this.video.playbackRate = rate
+      }
+    },
+
+    setVolume(volume) {
+      if (this.video) {
+        this.video.volume = volume / 100
       }
     }
   },

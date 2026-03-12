@@ -79,19 +79,20 @@ export const previewRoomMixin = {
       }
     },
 
-    updateRoomStatus() {
+    updateRoomStatus(previousPreviewFileId = null) {
       if (!this.isValidRoomId(this.room) || !this.joinedRoom) return
       const data = {
         user_id: this.user.id,
         local_id: this.room.localId,
         playlist_id: this.room.id,
         is_playing: this.isPlaying,
-        current_entity_id: this.currentEntity.id,
+        current_entity_id: this.currentEntity?.id,
         current_entity_index: this.playingEntityIndex,
         current_preview_file_index: this.currentPreviewIndex,
         current_preview_file_id: this.currentPreview
           ? this.currentPreview.id
           : null,
+        previous_preview_file_id: previousPreviewFileId,
         current_frame: this.currentFrameMovieOrPicture,
         is_repeating: this.isRepeating,
         is_laser_mode: this.isLaserModeOn,
@@ -115,6 +116,20 @@ export const previewRoomMixin = {
     postPanZoomChanged(x, y, zoom) {
       if (!this.isValidRoomId(this.room) || !this.joinedRoom) return
       this.$socket.emit('preview-room:panzoom-changed', {
+        playlist_id: this.room.id,
+        data: {
+          local_id: this.room.localId,
+          user_id: this.user.id,
+          x,
+          y,
+          zoom
+        }
+      })
+    },
+
+    postComparisonPanZoomChanged(x, y, zoom) {
+      if (!this.isValidRoomId(this.room) || !this.joinedRoom) return
+      this.$socket.emit('preview-room:comparison-panzoom-changed', {
         playlist_id: this.room.id,
         data: {
           local_id: this.room.localId,
@@ -205,7 +220,10 @@ export const previewRoomMixin = {
         eventData.current_preview_file_index === 0
       ) {
         const previewFileId = eventData.current_preview_file_id
-        const entity = this.entities[eventData.current_entity_id]
+        const entity = this.findEntity({
+          entity_id: eventData.current_entity_id,
+          preview_file_id: eventData.previous_preview_file_id
+        })
         const previewFile = this.getPreviewFileFromEntity(entity, previewFileId)
         const task = this.taskMap.get(previewFile.task_id)
         const taskTypeId = task.task_type_id
@@ -372,6 +390,7 @@ export const previewRoomMixin = {
 
       'preview-room:room-updated'(eventData) {
         if (!this.isValidRoomId(this.room)) return
+        if (this.room.localId === eventData.local_id) return
         this.people = eventData.people
         if (!this.joinedRoom) return
         if (this.room.localId === eventData.local_id) return
@@ -386,6 +405,15 @@ export const previewRoomMixin = {
         const y = eventData.data.y
         const zoom = eventData.data.zoom
         this.setPanZoom(x, y, zoom)
+      },
+
+      'preview-room:comparison-panzoom-changed'(eventData) {
+        if (!this.isValidRoomId(this.room) || !this.joinedRoom) return
+        if (this.room.localId === eventData.local_id) return
+        const x = eventData.data.x
+        const y = eventData.data.y
+        const zoom = eventData.data.zoom
+        this.setComparisonPanZoom(x, y, zoom)
       },
 
       'preview-room:add-annotation'(eventData) {

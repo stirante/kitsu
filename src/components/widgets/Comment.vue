@@ -87,6 +87,7 @@
                   comment.department_mentions || [],
                   personMap,
                   departmentMap,
+                  taskTypes,
                   uniqueClassName
                 )
               "
@@ -174,73 +175,151 @@
                       replyComment.department_mentions || [],
                       personMap,
                       departmentMap,
+                      taskTypes,
                       uniqueClassName
                     )
                   "
                   class="comment-text"
                 ></p>
+
+                <p>
+                  <a
+                    :href="getDownloadAttachmentPath(attachment)"
+                    :key="attachment.id"
+                    :title="attachment.name"
+                    target="_blank"
+                    v-for="attachment in replyAttachmentMap.get(replyComment.id)
+                      ?.pictures"
+                  >
+                    <img
+                      class="attachment"
+                      :src="getDownloadAttachmentPath(attachment)"
+                    />
+                  </a>
+                  <a
+                    :href="getDownloadAttachmentPath(attachment)"
+                    :key="attachment.id"
+                    :title="attachment.name"
+                    class="flexrow"
+                    target="_blank"
+                    v-for="attachment in replyAttachmentMap.get(replyComment.id)
+                      ?.files"
+                  >
+                    <paperclip-icon
+                      class="flexrow-item attachment-icon icon-1x"
+                    />
+                    <span class="flexrow-item">
+                      {{ attachment.name }}
+                    </span>
+                  </a>
+                </p>
               </div>
-              <template v-if="showReply">
-                <at-ta
-                  :members="atOptions"
-                  name-key="full_name"
-                  :limit="2"
-                  @update:value="onAtTextChanged"
-                >
-                  <template #item="{ item }">
-                    <template v-if="item.isTime"> ⏱️ frame </template>
-                    <template v-else-if="item.isDepartment">
-                      <span
-                        class="mr05"
-                        :style="{
-                          background: item.color,
-                          width: '10px',
-                          height: '10px',
-                          'border-radius': '50%'
-                        }"
-                      >
-                        &nbsp;
-                      </span>
-                      {{ item.full_name }}
-                    </template>
-                    <template v-else>
-                      <div class="flexrow">
-                        <people-avatar
-                          class="flexrow-item"
-                          :person="item"
-                          :size="20"
-                          :font-size="11"
-                          :is-lazy="false"
-                          :is-link="false"
-                        />
-                        <span class="flexrow-item">
-                          {{ item.full_name }}
+              <div
+                @drop="onDrop"
+                @dragover="onDragover"
+                @dragleave="onDragleave"
+              >
+                <template v-if="showReply">
+                  <at-ta
+                    :ats="['#', '@']"
+                    :members="[...membersForAts['@'], ...membersForAts['#']]"
+                    :filter-match="atOptionsFilter"
+                    name-key="full_name"
+                    :limit="2"
+                    @update:value="onAtTextChanged"
+                  >
+                    <template #item="{ item }">
+                      <template v-if="item.isTime"> ⏱️ frame </template>
+                      <template v-else-if="item.isDepartment">
+                        <span
+                          class="mr05"
+                          :style="{
+                            background: item.color,
+                            width: '10px',
+                            height: '10px',
+                            'border-radius': '50%'
+                          }"
+                        >
+                          &nbsp;
                         </span>
-                      </div>
+                        {{ item.full_name }}
+                      </template>
+                      <template v-else-if="item.isTaskType">
+                        <task-type-name
+                          :task-type="{
+                            color: item.color,
+                            name: item.full_name
+                          }"
+                          :is-link="false"
+                          thin
+                        />
+                      </template>
+                      <template v-else>
+                        <div class="flexrow">
+                          <people-avatar
+                            class="flexrow-item"
+                            :person="item"
+                            :size="20"
+                            :font-size="11"
+                            :is-lazy="false"
+                            :is-link="false"
+                          />
+                          <span class="flexrow-item">
+                            {{ item.full_name }}
+                          </span>
+                        </div>
+                      </template>
                     </template>
-                  </template>
-                  <textarea
-                    ref="reply"
-                    class="reply"
-                    @keyup.ctrl.enter="onReplyClicked"
-                    v-model="replyText"
-                  />
-                </at-ta>
-                <div class="has-text-right">
-                  <button-simple
-                    class="reply-button"
-                    :text="$t('main.reply')"
-                    :is-loading="isReplyLoading"
-                    @click="onReplyClicked"
-                  />
-                </div>
-              </template>
+                    <textarea
+                      ref="reply"
+                      class="reply"
+                      @keyup.ctrl.enter="onReplyClicked"
+                      @dragover="onDragover"
+                      @dragleave="onDragleave"
+                      v-model="replyText"
+                    />
+                  </at-ta>
+                  <div class="reply-attachments">
+                    <div
+                      :key="'attachment-' + index"
+                      class="attachment-file"
+                      v-for="(attach, index) in replyAttachments"
+                    >
+                      {{ shortenText(attach.get('file').name, 40) }}
+                      <span @click="removeReplyAttachment(attach)">x</span>
+                    </div>
+                  </div>
+                  <div class="flexrow ml05">
+                    <emoji-button
+                      class="ml05 flexrow-item"
+                      @select="onSelectEmoji"
+                    />
+                    <button-simple
+                      class="flexrow-item attachment-button"
+                      icon="attach"
+                      :title="$t('comments.add_attachment')"
+                      @click="modals.addAttachment = true"
+                    />
+                    <span class="filler"></span>
+                    <button-simple
+                      class="reply-button"
+                      :text="$t('main.reply')"
+                      :is-loading="isReplyLoading"
+                      @click="onReplyClicked"
+                    />
+                  </div>
+                </template>
+              </div>
             </div>
 
             <div
               class="flexrow"
               :title="isLikedBy"
-              v-if="comment.text.length > 0 || comment.previews.length > 0"
+              v-if="
+                comment.text.length > 0 ||
+                comment.previews.length > 0 ||
+                comment.attachment_files.length > 0
+              "
             >
               <button
                 class="like-button flexrow-item"
@@ -358,6 +437,14 @@
         </div>
       </div>
     </div>
+    <add-attachment-modal
+      ref="add-attachment-modal"
+      :active="modals.addAttachment"
+      :title="$t('comments.add_attachment_to_reply')"
+      @cancel="modals.addAttachment = false"
+      @confirm="addAttachmentToReply"
+      v-if="modals.addAttachment"
+    />
   </div>
 </template>
 
@@ -379,14 +466,18 @@ import { getDownloadAttachmentPath, pluralizeEntityType } from '@/lib/path'
 import { renderComment, replaceTimeWithTimecode } from '@/lib/render'
 import { sortByName } from '@/lib/sorting'
 import { formatDate, parseDate } from '@/lib/time'
+import stringHelpers from '@/lib/string'
 
 import { domMixin } from '@/components/mixins/dom'
 
+import AddAttachmentModal from '@/components/modals/AddAttachmentModal.vue'
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
 import CommentMenu from '@/components/widgets/CommentMenu.vue'
 import Checklist from '@/components/widgets/Checklist.vue'
+import EmojiButton from '@/components/widgets/EmojiButton.vue'
 import PeopleAvatar from '@/components/widgets/PeopleAvatar.vue'
 import PeopleName from '@/components/widgets/PeopleName.vue'
+import TaskTypeName from '@/components/widgets/TaskTypeName.vue'
 import ValidationTag from '@/components/widgets/ValidationTag.vue'
 
 export default {
@@ -396,25 +487,32 @@ export default {
 
   components: {
     AtTa,
+    AddAttachmentModal,
     ButtonSimple,
     Checklist,
     ChevronDownIcon,
     CopyIcon,
     CommentMenu,
+    EmojiButton,
     LinkIcon,
     PaperclipIcon,
     PeopleAvatar,
     PeopleName,
     ThumbsUpIcon,
-    ValidationTag
+    ValidationTag,
+    TaskTypeName
   },
 
   data() {
     return {
-      atOptions: [],
+      membersForAts: { '@': [], '#': [] },
       checklist: [],
       isReplyLoading: false,
       menuVisible: false,
+      modals: {
+        addAttachment: false
+      },
+      replyAttachments: [],
       replyText: '',
       showReply: false,
       uniqueClassName: (Math.random() + 1).toString(36).substring(2)
@@ -464,6 +562,10 @@ export default {
       type: Boolean,
       default: false
     },
+    taskTypes: {
+      type: Array,
+      default: () => []
+    },
     team: {
       type: Array,
       default: () => []
@@ -491,6 +593,7 @@ export default {
         element.addEventListener('click', this.timeCodeClicked)
       }
     )
+    window.addEventListener('paste', this.onPaste, false)
   },
 
   beforeUnmount() {
@@ -499,6 +602,7 @@ export default {
         element.removeEventListener('click', this.timeCodeClicked)
       }
     )
+    window.removeEventListener('paste', this.onPaste, false)
   },
 
   computed: {
@@ -566,8 +670,14 @@ export default {
         .join(', ')
     },
 
+    commentAttachments() {
+      return this.comment.attachment_files.filter(
+        attachment => !attachment.reply_id
+      )
+    },
+
     pictureAttachments() {
-      return this.comment.attachment_files
+      return this.commentAttachments
         .filter(attachment =>
           files.IMG_EXTENSIONS.includes(attachment.extension)
         )
@@ -579,9 +689,29 @@ export default {
     },
 
     fileAttachments() {
-      return this.comment.attachment_files.filter(
+      return this.commentAttachments.filter(
         attachment => !files.IMG_EXTENSIONS.includes(attachment.extension)
       )
+    },
+
+    replyAttachmentMap() {
+      const map = new Map()
+      this.comment.attachment_files.forEach(attachment => {
+        if (attachment.reply_id) {
+          if (!map.has(attachment.reply_id)) {
+            map.set(attachment.reply_id, {
+              pictures: [],
+              files: []
+            })
+          }
+          if (files.IMG_EXTENSIONS.includes(attachment.extension)) {
+            map.get(attachment.reply_id).pictures.push(attachment)
+          } else {
+            map.get(attachment.reply_id).files.push(attachment)
+          }
+        }
+      })
+      return map
     },
 
     commentDate() {
@@ -614,6 +744,8 @@ export default {
       'replyToComment',
       'updatePreviewFileValidationStatus'
     ]),
+
+    shortenText: stringHelpers.shortenText,
 
     formatDate(date) {
       return formatDate(date)
@@ -736,15 +868,41 @@ export default {
       })
     },
 
+    onDrop(event) {
+      event.preventDefault()
+      const files = event.dataTransfer.files
+      if (files.length > 0) {
+        const form = new FormData()
+        form.append('file', files[0])
+        this.addAttachmentToReply([form])
+      }
+    },
+
+    onDragover(event) {
+      event.preventDefault()
+    },
+
+    onDragleave(event) {
+      event.preventDefault()
+    },
+
     onReplyClicked() {
       this.isReplyLoading = true
-      this.replyToComment({ comment: this.comment, text: this.replyText })
+      this.replyToComment({
+        comment: this.comment,
+        text: this.replyText,
+        attachments: this.replyAttachments
+      })
         .then(() => {
           this.isReplyLoading = false
           this.replyText = ''
           this.showReply = false
+          this.replyAttachments = []
         })
-        .catch(console.error)
+        .catch(error => {
+          console.error(error)
+          this.isReplyLoading = false
+        })
     },
 
     onDeleteReplyClicked(reply) {
@@ -755,6 +913,15 @@ export default {
         .catch(console.error)
     },
 
+    atOptionsFilter(name, chunk, at, v) {
+      // filter the list by the given at symbol
+      const option_at = v?.isTaskType ? '#' : '@'
+      // @ for team, # for task type
+      if (at !== option_at) return false
+      // match at lower-case
+      return name?.toLowerCase().indexOf(chunk.toLowerCase()) > -1
+    },
+
     onAtTextChanged(input) {
       if (input.includes('@frame')) {
         this.replyText = replaceTimeWithTimecode(
@@ -763,6 +930,33 @@ export default {
           this.frame + 1,
           this.fps
         )
+      }
+    },
+
+    onSelectEmoji(emoji) {
+      const textarea = this.$refs['reply']
+      this.replyText = stringHelpers.insertInTextArea(textarea, emoji.i)
+    },
+
+    addAttachmentToReply(files) {
+      this.modals.addAttachment = false
+      this.replyAttachments = this.replyAttachments.concat(files)
+    },
+
+    removeReplyAttachment(attachment) {
+      this.replyAttachments = this.replyAttachments.filter(
+        a => a !== attachment
+      )
+    },
+
+    onPaste(event) {
+      if (this.modals.addAttachment || !this.showReply) return
+      if (this.$refs['reply'] !== document.activeElement) return
+      const files = event.clipboardData.files
+      if (files.length > 0) {
+        const form = new FormData()
+        form.append('file', files[0])
+        this.addAttachmentToReply([form])
       }
     }
   },
@@ -781,33 +975,58 @@ export default {
         this.onChecklistChanged()
       }
     },
+    taskTypes: {
+      deep: true,
+      immediate: true,
+      handler(values) {
+        const taskTypeOptions = values.map(taskType => {
+          return {
+            isTaskType: true,
+            full_name: taskType.name,
+            color: taskType.color,
+            id: taskType.id,
+            url: taskType.url
+          }
+        })
+        taskTypeOptions.push({
+          isTaskType: true,
+          color: '#000',
+          full_name: 'All'
+        })
+        this.membersForAts['#'] = taskTypeOptions
+      }
+    },
 
     team: {
       deep: true,
       immediate: true,
       handler() {
+        let teamOptions
         if (this.isCurrentUserClient) {
-          this.atOptions = this.team.filter(person =>
-            ['admin', 'manager', 'supervisor', 'client'].includes(person.role)
+          teamOptions = this.team.filter(person =>
+            ['admin', 'manager', 'client'].includes(person.role)
           )
         } else {
-          this.atOptions = [...this.team]
+          teamOptions = [...this.team]
         }
-        this.atOptions = this.atOptions.concat(
-          this.productionDepartmentIds.map(departmentId => {
-            const department = this.departmentMap.get(departmentId)
-            return {
-              isDepartment: true,
-              full_name: department.name,
-              color: department.color,
-              id: departmentId
-            }
-          })
-        )
-        this.atOptions.push({
+        if (!this.isCurrentUserClient) {
+          teamOptions = teamOptions.concat(
+            this.productionDepartmentIds.map(departmentId => {
+              const department = this.departmentMap.get(departmentId)
+              return {
+                isDepartment: true,
+                full_name: department.name,
+                color: department.color,
+                id: departmentId
+              }
+            })
+          )
+        }
+        teamOptions.push({
           isTime: true,
           full_name: 'frame'
         })
+        this.membersForAts['@'] = teamOptions
       }
     }
   }
@@ -820,6 +1039,9 @@ export default {
 .dark {
   .comment-text {
     color: $white-grey;
+  }
+  .comment-footer {
+    color: $grey;
   }
 
   .content .client-comment {
@@ -872,6 +1094,9 @@ article.comment {
     word-break: break-word;
     hyphens: auto;
     hyphenate-limit-chars: 8 6 2;
+  }
+  .comment-footer {
+    color: $grey;
   }
 }
 
@@ -1114,6 +1339,29 @@ textarea.reply {
   }
   &[data-status='rejected'] {
     background: $red;
+  }
+}
+
+.reply-attachments {
+  margin-bottom: 10px;
+}
+
+.attachment-button {
+  border: 0;
+}
+
+.attachment-file {
+  margin-top: 3px;
+  margin-bottom: 3px;
+  margin-left: 9px;
+  margin-right: 3px;
+  padding-bottom: 3px;
+  border-bottom: 1px dashed $light-grey-light;
+  color: var(--text);
+
+  span {
+    cursor: pointer;
+    float: right;
   }
 }
 

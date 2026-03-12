@@ -25,11 +25,13 @@
         <div class="filters flexrow mt1 mb1">
           <combobox-studio
             class="mr1"
+            all-studios-label
             :label="$t('people.fields.studio')"
             v-model="filters.studioId"
           />
           <combobox-department
             class="flexrow-item"
+            all-departments-label
             :label="$t('main.department')"
             v-model="filters.departmentId"
           />
@@ -311,7 +313,7 @@ export default {
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .all-tasks {
   display: flex;
   flex-direction: column;

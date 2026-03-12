@@ -33,16 +33,11 @@
                 v-model="selectedDepartment"
                 v-if="departments.length > 0"
               />
-              <button-simple
+              <combobox-display-options
                 class="flexrow-item"
-                icon="grid"
-                :is-on="contactSheetMode"
-                :title="$t('tasks.show_contact_sheet')"
-                @click="contactSheetMode = !contactSheetMode"
+                :type="type"
+                v-model="displaySettings"
               />
-              <show-assignations-button class="flexrow-item" />
-              <show-infos-button class="flexrow-item" />
-              <big-thumbnails-button class="flexrow-item" />
             </div>
             <div class="flexrow" v-if="isCurrentUserManager">
               <button-simple
@@ -104,9 +99,9 @@
         />
         <shot-list
           ref="shot-list"
-          :contact-sheet-mode="contactSheetMode"
           :department-filter="departmentFilter"
           :displayed-shots="displayedShotsBySequence"
+          :display-settings="displaySettings"
           :is-loading="isShotsLoading || initialLoading"
           :is-error="isShotsLoadingError"
           :validation-columns="shotValidationColumns"
@@ -277,13 +272,14 @@
 
     <add-thumbnails-modal
       ref="add-thumbnails-modal"
+      active
       entity-type="Shot"
       parent="shots"
-      :active="modals.isAddThumbnailsDisplayed"
       :is-loading="loading.addThumbnails"
       :is-error="errors.addThumbnails"
       @cancel="hideAddThumbnailsModal"
       @confirm="confirmAddThumbnails"
+      v-if="modals.isAddThumbnailsDisplayed"
     />
 
     <shot-history-modal
@@ -318,10 +314,10 @@ import { entitiesMixin } from '@/components/mixins/entities'
 
 import AddMetadataModal from '@/components/modals/AddMetadataModal.vue'
 import AddThumbnailsModal from '@/components/modals/AddThumbnailsModal.vue'
-import BigThumbnailsButton from '@/components/widgets/BigThumbnailsButton.vue'
 import BuildFilterModal from '@/components/modals/BuildFilterModal.vue'
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
 import ComboboxDepartment from '@/components/widgets/ComboboxDepartment.vue'
+import ComboboxDisplayOptions from '@/components/widgets/ComboboxDisplayOptions.vue'
 import CreateTasksModal from '@/components/modals/CreateTasksModal.vue'
 import DeleteModal from '@/components/modals/DeleteModal.vue'
 import EditShotModal from '@/components/modals/EditShotModal.vue'
@@ -335,8 +331,6 @@ import SearchField from '@/components/widgets/SearchField.vue'
 import SearchQueryList from '@/components/widgets/SearchQueryList.vue'
 import SetFramesFromTaskTypePreviewsModal from '@/components/modals/SetFramesFromTaskTypePreviewsModal.vue'
 import SortingInfo from '@/components/widgets/SortingInfo.vue'
-import ShowAssignationsButton from '@/components/widgets/ShowAssignationsButton.vue'
-import ShowInfosButton from '@/components/widgets/ShowInfosButton.vue'
 import ShotHistoryModal from '@/components/modals/ShotHistoryModal.vue'
 import ShotList from '@/components/lists/ShotList.vue'
 import TaskInfo from '@/components/sides/TaskInfo.vue'
@@ -349,10 +343,10 @@ export default {
   components: {
     AddMetadataModal,
     AddThumbnailsModal,
-    BigThumbnailsButton,
     BuildFilterModal,
     ButtonSimple,
     ComboboxDepartment,
+    ComboboxDisplayOptions,
     CreateTasksModal,
     DeleteModal,
     EditShotModal,
@@ -367,8 +361,6 @@ export default {
     SetFramesFromTaskTypePreviewsModal,
     SortingInfo,
     ShotHistoryModal,
-    ShowAssignationsButton,
-    ShowInfosButton,
     ShotList,
     TaskInfo
   },
@@ -376,9 +368,15 @@ export default {
   data() {
     return {
       type: 'shot',
-      contactSheetMode: false,
       deleteAllTasksLockText: null,
       descriptorToEdit: {},
+      displaySettings: {
+        bigThumbnails: false,
+        contactSheetMode: false,
+        inOutTimecode: false,
+        showAssignations: true,
+        showInfos: true
+      },
       formData: null,
       historyShot: {},
       initialLoading: true,
@@ -387,7 +385,8 @@ export default {
         'Nb Frames',
         'Frame In',
         'Frame Out',
-        'FPS'
+        'FPS',
+        'Resolution'
       ],
       genericColumns: [
         'Metadata column name (text value)',
@@ -455,7 +454,9 @@ export default {
     const finalize = () => {
       this.$nextTick(() => {
         // Needed to be sure the current production is set
-        this.loadShots()
+        this.loadShots(() => {
+          this.initialLoading = false
+        })
       })
     }
 
@@ -479,7 +480,7 @@ export default {
     } else {
       if (!this.isShotsLoading) this.initialLoading = false
       this.onSearchChange()
-      this.$refs['shot-list'].setScrollPosition(this.shotListScrollPosition)
+      this.$refs['shot-list']?.setScrollPosition(this.shotListScrollPosition)
       this.$nextTick(() => {
         this.$refs['shot-list']?.selectTaskFromQuery()
         this.applySearchFromUrl()
@@ -516,7 +517,6 @@ export default {
       'isShotTime',
       'isShotsLoading',
       'isShotsLoadingError',
-      'isShowAssignations',
       'isTVShow',
       'openProductions',
       'productionShotTaskTypes',
@@ -617,12 +617,12 @@ export default {
 
     setOptionalImportColumns() {
       const columns = [
-        this.$t('shots.fields.name'),
         this.$t('shots.fields.description'),
         this.$t('shots.fields.nb_frames'),
         this.$t('shots.fields.frame_in'),
         this.$t('shots.fields.frame_out'),
-        this.$t('shots.fields.fps')
+        this.$t('shots.fields.fps'),
+        this.$t('shots.fields.resolution')
       ]
       if (this.isPaperProduction) {
         columns.splice(1, 1)
@@ -798,7 +798,7 @@ export default {
 
     confirmAddThumbnails(forms) {
       const addPreview = form => {
-        this.addThumbnailsModal.markLoading(form.task.entity_id)
+        this.addThumbnailsModal?.markLoading(form.task.entity_id)
         return this.commentTaskWithPreview({
           taskId: form.task.id,
           commentText: '',
@@ -813,8 +813,7 @@ export default {
             })
           })
           .then(() => {
-            this.addThumbnailsModal.markUploaded(form.task.entity_id)
-            return Promise.resolve()
+            this.addThumbnailsModal?.markUploaded(form.task.entity_id)
           })
       }
       this.loading.addThumbnails = true
@@ -1121,7 +1120,7 @@ export default {
         data.nb_frames = parseInt(value) - parseInt(shot.data.frame_in) + 1
       }
       await this.editShot(data)
-      this.applySearchFromUrl()
+      this.applySearchFromUrl(false)
     },
 
     showEDLImportModal() {
@@ -1171,7 +1170,7 @@ export default {
     },
 
     onSearchTyped() {
-      if (this.shotMap.size < 800) {
+      if (this.shotMap.size < 800 || this.searchField?.getValue() === '') {
         this.onSearchChange()
       }
     }
@@ -1188,7 +1187,7 @@ export default {
         this.$refs['shot-search-field']?.setValue('')
         this.$store.commit('SET_SHOT_LIST_SCROLL_POSITION', 0)
 
-        if (!this.isTVShow) {
+        if (this.currentProduction && !this.isTVShow) {
           this.loadShots()
         }
       }
@@ -1220,9 +1219,7 @@ export default {
         this.$nextTick(() => {
           this.$refs['shot-list']?.selectTaskFromQuery()
         })
-        if (this.$refs['shot-list']) {
-          this.$refs['shot-list'].setScrollPosition(this.shotListScrollPosition)
-        }
+        this.$refs['shot-list']?.setScrollPosition(this.shotListScrollPosition)
       }
     }
   },

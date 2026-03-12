@@ -32,7 +32,7 @@
           <tr
             class="datatable-row"
             :key="statusAutomation.id"
-            v-for="statusAutomation in entries"
+            v-for="statusAutomation in statusAutomations"
           >
             <td scope="row" class="name">
               <div class="flexrow">
@@ -44,7 +44,7 @@
                   <alert-triangle-icon />
                 </span>
                 <span class="flexrow-item">
-                  {{ statusAutomation.entity_type }}
+                  {{ statusAutomation.entityType }}
                 </span>
               </div>
             </td>
@@ -77,7 +77,6 @@
               {{ formatBoolean(statusAutomation.import_last_revision) }}
             </td>
             <row-actions-cell
-              :entry-id="statusAutomation.id"
               @edit-clicked="$emit('edit-clicked', statusAutomation)"
               @delete-clicked="$emit('delete-clicked', statusAutomation)"
               v-if="isEditable"
@@ -98,8 +97,8 @@
     <table-info :is-loading="isLoading" :is-error="isError" />
 
     <p class="has-text-centered nb-status-automations">
-      {{ entries.length }}
-      {{ $tc('status_automations.number', entries.length) }}
+      {{ statusAutomations.length }}
+      {{ $tc('status_automations.number', statusAutomations.length) }}
     </p>
   </div>
 </template>
@@ -155,7 +154,16 @@ export default {
       'getTaskType',
       'isStatusAutomationDisabled',
       'remainingStatusAutomations'
-    ])
+    ]),
+
+    statusAutomations() {
+      return this.entries.map(statusAutomation => ({
+        ...statusAutomation,
+        entityType: this.$t(
+          `status_automations.entity_types.${statusAutomation.entity_type.toLowerCase()}`
+        )
+      }))
+    }
   },
   methods: {
     ...mapActions(['removeStatusAutomationFromProduction']),

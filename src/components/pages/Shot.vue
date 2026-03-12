@@ -21,6 +21,21 @@
         <div class="entity-title flexrow-item">
           {{ title }}
         </div>
+        <div class="filler"></div>
+        <router-link
+          class="flexrow-item has-text-centered back-link ml1"
+          :to="previousEntityPath"
+          v-if="previousEntityPath && entityList.length > 1"
+        >
+          <chevron-left-icon />
+        </router-link>
+        <router-link
+          class="flexrow-item has-text-centered back-link"
+          :to="nextEntityPath"
+          v-if="nextEntityPath && entityList.length > 1"
+        >
+          <chevron-right-icon />
+        </router-link>
       </div>
 
       <div class="entity-data block">
@@ -326,7 +341,11 @@
 
 <script>
 import { mapGetters, mapActions } from 'vuex'
-import { CornerLeftUpIcon } from 'lucide-vue-next'
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CornerLeftUpIcon
+} from 'lucide-vue-next'
 
 import shotStore from '@/store/modules/shots'
 
@@ -359,6 +378,8 @@ export default {
   components: {
     ButtonSimple,
     ComboboxNumber,
+    ChevronLeftIcon,
+    ChevronRightIcon,
     CornerLeftUpIcon,
     DescriptionCell,
     EditShotModal,
@@ -430,7 +451,7 @@ export default {
           return `${this.currentShot.sequence_name} / ${this.currentShot.name}`
         }
       } else {
-        return 'Loading...'
+        return this.$t('main.loading')
       }
     },
 
@@ -723,9 +744,10 @@ h2.subtitle {
 }
 
 .task-list {
-  width: 100%;
-  flex: none;
-  margin-bottom: 2em;
+  flex: 1;
+  margin-bottom: 3em;
+  min-width: 100%;
+  overflow: hidden;
 }
 
 .datatable-row {
@@ -802,13 +824,15 @@ h2.subtitle {
 }
 
 .infos {
-  flex: 1;
+  height: 100%;
   margin-top: 1em;
+  margin-bottom: 1em;
+  max-height: 100%;
   overflow-y: auto;
 
-  .entity-infos {
-    align-self: flex-start;
-    flex: 1;
+  .metadata-infos {
+    flex: unset;
+    overflow: auto;
   }
 }
 

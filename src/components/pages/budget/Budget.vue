@@ -3,7 +3,6 @@
     <template #main>
       <div class="flexcolumn page">
         <budget-header
-          :budgets="budgets"
           :budget-options="budgetOptions"
           :budget="currentBudget"
           :is-loading="loading.budgets"
@@ -11,24 +10,28 @@
           :is-error-expenses="errors.expenses"
           :is-loading-expenses="loading.expenses"
           :is-showing-expenses="expenses.showing"
+          :is-showing-items="items.showing"
           @change-budget="onChangeBudget"
           @delete-budget="onDeleteBudgetClicked"
           @edit-budget="onEditBudgetClicked"
           @export-budget="onExportBudgetClicked"
-          @toggle-expenses="onToggleExpenses"
           @new-version="onNewBudgetVersionClicked"
+          @toggle-expenses="onToggleExpenses"
+          @toggle-items="onToggleItems"
         />
 
         <budget-list
           :budget-departments="budgetDepartments"
-          :budget-entries="budgetEntries"
-          :costs-months="costsMonths"
-          :currency="currentBudget?.currency || 'USD'"
           :current-budget="currentBudget"
           :expenses="expenses.data"
           :is-error="errors.entries"
           :is-loading="loading.entries"
           :is-showing-expenses="expenses.showing"
+          :is-showing-items="items.showing"
+          :linked-hardware-items="linkedHardwareItems"
+          :linked-software-licenses="linkedSoftwareLicenses"
+          :hardware-items-costs="hardwareItemsCosts"
+          :software-licenses-costs="softwareLicensesCosts"
           :months-between-start-and-now="monthsBetweenStartAndNow"
           :months-between-now-and-end="monthsBetweenNowAndEnd"
           :months-between-production-dates="monthsBetweenProductionDates"
@@ -66,7 +69,11 @@
           :is-loading="loading.del"
           :is-error="errors.deleteBudget"
           :lock-text="currentBudget?.name"
-          :text="$t('budget.delete_budget_message')"
+          :text="
+            $t('budget.delete_budget_message', {
+              name: currentBudget?.name
+            })
+          "
           @cancel="modals.deleteBudget = false"
           @confirm="deleteBudget"
         />
@@ -91,6 +98,8 @@
         :budget-departments="budgetDepartments"
         :budget-entries="budgetEntries"
         :months-between-production-dates="monthsBetweenProductionDates"
+        :hardware-items="hardwareItemsCosts"
+        :software-licenses="softwareLicensesCosts"
         :pie-chart-data="pieChartData"
         :pie-chart-colors="pieChartColors"
         :column-chart-data="columnChartData"
@@ -104,7 +113,7 @@ import { mapGetters, mapActions } from 'vuex'
 import moment from 'moment'
 
 import { pageMixin } from '@/components/mixins/page'
-import { formatMonth, parseSimpleDate } from '@/lib/time'
+import { parseSimpleDate } from '@/lib/time'
 import csv from '@/lib/csv'
 
 import BudgetAnalytics from '@/components/pages/budget/BudgetAnalytics.vue'
@@ -152,10 +161,10 @@ export default {
       budgets: [],
       budgetEntries: [],
       budgetEntryToEdit: {},
-      budgetOptions: [],
       budgetToEdit: {},
-      costsMonths: [],
       currentBudget: {},
+      linkedHardwareItems: {},
+      linkedSoftwareLicenses: {},
       errors: {
         budgets: false,
         createBudget: false,
@@ -165,6 +174,9 @@ export default {
         editBudgetEntry: false,
         entries: false,
         expenses: false
+      },
+      items: {
+        showing: false
       },
       expenses: {
         data: {},
@@ -183,7 +195,6 @@ export default {
       modals: {
         createBudget: false,
         createBudgetEntry: false,
-        editBudgetEntry: false,
         deleteBudget: false,
         deleteBudgetEntry: false
       },
@@ -197,16 +208,13 @@ export default {
     await this.setSalaryScale()
     await this.loadBudgets()
     await this.loadBudgetEntries()
+    this.linkedHardwareItems = await this.loadLinkedHardwareItems()
+    this.linkedSoftwareLicenses = await this.loadLinkedSoftwareLicenses()
     this.resetMonths()
   },
 
   computed: {
-    ...mapGetters([
-      'currentProduction',
-      'departments',
-      'departmentMap',
-      'personMap'
-    ]),
+    ...mapGetters(['currentProduction', 'departmentMap', 'personMap']),
 
     monthsBetweenStartAndNow() {
       return this.getMonthsBetweenDates(
@@ -222,8 +230,15 @@ export default {
       )
     },
 
+    budgetOptions() {
+      return this.budgets.map(budget => ({
+        label: `v${budget.revision} - ${budget.name}`,
+        value: budget
+      }))
+    },
+
     lastRevision() {
-      return this.budgets.length > 0 ? this.budgets[0].revision : 0
+      return this.budgets?.[0]?.revision || 0
     },
 
     budgetDepartments() {
@@ -292,13 +307,22 @@ export default {
     },
 
     totalEntry() {
-      const total = this.budgetDepartments.reduce(
+      let total = this.budgetDepartments.reduce(
         (acc, department) => acc + department.total,
         0
       )
+      if (this.items.showing) {
+        total +=
+          this.hardwareItemsCosts.total + this.softwareLicensesCosts.total
+      }
       const monthCosts = this.budgetDepartments.reduce((acc, department) => {
         Object.keys(department.monthCosts).forEach(month => {
           acc[month] = (acc[month] || 0) + department.monthCosts[month]
+          if (this.items.showing) {
+            acc[month] += this.hardwareItemsCosts[department.id]?.[month] || 0
+            acc[month] +=
+              this.softwareLicensesCosts[department.id]?.[month] || 0
+          }
         })
         return acc
       }, {})
@@ -306,6 +330,14 @@ export default {
         total,
         monthCosts
       }
+    },
+
+    hardwareItemsCosts() {
+      return this.getItemCosts(this.linkedHardwareItems)
+    },
+
+    softwareLicensesCosts() {
+      return this.getItemCosts(this.linkedSoftwareLicenses)
     },
 
     pieChartData() {
@@ -339,6 +371,8 @@ export default {
       'deleteProductionBudget',
       'deleteProductionBudgetEntry',
       'loadExpenses',
+      'loadLinkedHardwareItems',
+      'loadLinkedSoftwareLicenses',
       'loadProductionBudget',
       'loadProductionBudgets',
       'loadProductionBudgetEntry',
@@ -348,16 +382,58 @@ export default {
       'updateProductionBudgetEntry'
     ]),
 
-    formatMonth,
+    /*
+     * It calculates the cost of the items for each department and each month.
+     * It returns an object with the cost of the items for each department and
+     * each month.
+     */
+    getItemCosts(linkedItems) {
+      const itemCosts = { total: 0 }
+      this.budgetDepartments.forEach(department => {
+        const items = linkedItems[department.id] || []
+        const monthlyDepartmentCost = items.reduce((acc, item) => {
+          return acc + item.monthly_cost
+        }, 0)
+
+        if (!itemCosts[department.id]) {
+          itemCosts[department.id] = { total: 0 }
+        }
+        this.monthsBetweenProductionDates.forEach(month => {
+          itemCosts[department.id][month.format('YYYY-MM')] = 0
+          department.persons.forEach(person => {
+            const personCost = this.getMonthCost(person, month)
+            if (personCost > 0) {
+              itemCosts[department.id][month.format('YYYY-MM')] +=
+                monthlyDepartmentCost
+              itemCosts[department.id].total += monthlyDepartmentCost
+              itemCosts.total += monthlyDepartmentCost
+            }
+          })
+        })
+      })
+      return itemCosts
+    },
+
+    /*
+     * It gets the cost of a person for a given month, exceptions are
+     * prioritized over the month costs.
+     */
+    getMonthCost(personEntry, month) {
+      const monthKey =
+        typeof month === 'string' ? month : month.format('YYYY-MM')
+      personEntry.exceptions = personEntry.exceptions || {}
+      return (
+        parseInt(personEntry.exceptions[monthKey] || 0) ||
+        parseInt(personEntry.monthCosts[monthKey] || 0) ||
+        0
+      )
+    },
 
     resetMonths() {
       this.monthsBetweenProductionDates = this.getMonthsBetweenDates(
         this.currentProduction.start_date,
         this.currentProduction.end_date
       )
-      this.costsMonths = this.monthsBetweenProductionDates.map(month => {
-        return month.format('YYYY-MM')
-      })
     },
 
     sortDepartmentPersons(a, b) {
@@ -441,6 +517,7 @@ export default {
     async createBudget(budget) {
       try {
         this.loading.createBudget = true
+        this.errors.createBudget = false
         if (budget.id) {
           await this.updateProductionBudget({
             productionId: this.currentProduction.id,
@@ -468,7 +545,6 @@ export default {
           this.budgets.unshift(newBudget)
           this.currentBudget = newBudget
         }
-        this.resetBudgetOptions()
         this.modals.createBudget = false
       } catch (error) {
         console.error(error)
@@ -486,27 +562,19 @@ export default {
     async deleteBudget() {
       this.loading.deleteBudget = true
       try {
+        const budget = this.currentBudget
         await this.deleteProductionBudget({
           productionId: this.currentProduction.id,
-          budgetId: this.currentBudget.id
+          budgetId: budget.id
         })
-        this.postDeleteBudget(this.currentBudget)
+        this.budgets = this.budgets.filter(b => b.id !== budget.id)
+        this.currentBudget = this.budgets?.[0] || {}
         this.modals.deleteBudget = false
       } catch (error) {
         console.error(error)
         this.errors.deleteBudget = true
       } finally {
         this.loading.deleteBudget = false
-      }
-    },
-
-    postDeleteBudget(budget) {
-      this.budgets = this.budgets.filter(b => b.id !== budget.id)
-      this.resetBudgetOptions()
-      if (this.budgets.length > 0) {
-        this.currentBudget = this.budgets[0]
-      } else {
-        this.currentBudget = {}
       }
     },
 
@@ -526,6 +594,7 @@ export default {
     async runRemoteBudgetEntryCreation(budgetEntry) {
       try {
         this.loading.createBudgetEntry = true
+        this.errors.createBudgetEntry = false
         await this.createProductionBudgetEntry({
           productionId: this.currentProduction.id,
           budgetId: this.currentBudget.id,
@@ -624,8 +693,7 @@ export default {
           this.currentProduction.id
         )
         this.budgets.sort((a, b) => b.revision - a.revision)
-        this.currentBudget = this.budgets.length > 0 ? this.budgets[0] : {}
-        this.resetBudgetOptions()
+        this.currentBudget = this.budgets?.[0] || {}
       } catch (error) {
         console.error(error)
         this.errors.budgets = true
@@ -651,15 +719,6 @@ export default {
       }
     },
 
-    resetBudgetOptions() {
-      this.budgetOptions = this.budgets.map(budget => {
-        return {
-          label: `v${budget.revision} - ${budget.name}`,
-          value: budget
-        }
-      })
-    },
-
     getMonthsBetweenDates(startDate, endDate) {
       const months = []
       const current = parseSimpleDate(startDate)
@@ -675,6 +734,7 @@ export default {
       if (!this.expenses.showing) {
         try {
           this.loading.expenses = true
+          this.errors.expenses = false
           this.expenses.data = await this.loadExpenses(
             this.currentProduction.id
           )
@@ -686,6 +746,10 @@ export default {
         }
       }
       this.expenses.showing = !this.expenses.showing
+    },
+
+    onToggleItems() {
+      this.items.showing = !this.items.showing
     }
   },
 
@@ -702,7 +766,7 @@ export default {
 
   socket: {
     events: {
-      'budget:create': async function (data) {
+      async 'budget:create'(data) {
         if (data.project_id !== this.currentProduction.id) return
         const budget = await this.loadProductionBudget({
           productionId: this.currentProduction.id,
@@ -711,11 +775,10 @@ export default {
         const oldBudget = this.budgets.find(b => b.id === budget.id)
         if (budget && !oldBudget) {
           this.budgets.unshift(budget)
-          this.resetBudgetOptions()
         }
       },
 
-      'budget:update': async function (data) {
+      async 'budget:update'(data) {
         if (data.project_id !== this.currentProduction.id) return
         const budget = await this.loadProductionBudget({
           productionId: this.currentProduction.id,
@@ -728,25 +791,23 @@ export default {
               name: budget.name,
               currency: budget.currency
             })
-            this.resetBudgetOptions()
           }
         }
       },
 
-      'budget:delete': function (data) {
+      async 'budget:delete'(data) {
         if (data.project_id !== this.currentProduction.id) return
         const oldBudget = this.budgets.find(b => b.id === data.budget_id)
         const isCurrentBudgetDeleted = this.currentBudget.id === data.budget_id
         if (oldBudget) {
           this.budgets = this.budgets.filter(b => b.id !== data.budget_id)
-          this.resetBudgetOptions()
           if (isCurrentBudgetDeleted) {
-            this.currentBudget = this.budgets[0]
+            this.currentBudget = this.budgets?.[0] || {}
           }
         }
       },
 
-      'budget-entry:create': async function (data) {
+      async 'budget-entry:create'(data) {
         if (data.project_id !== this.currentProduction.id) return
         if (data.budget_id !== this.currentBudget.id) return
         const oldBudgetEntry = this.budgetEntries.find(
@@ -761,7 +822,7 @@ export default {
         this.budgetEntries.push(budgetEntry)
       },
 
-      'budget-entry:update': async function (data) {
+      async 'budget-entry:update'(data) {
         if (data.project_id !== this.currentProduction.id) return
         if (data.budget_id !== this.currentBudget.id) return
         const oldBudgetEntry = this.budgetEntries.find(
@@ -777,7 +838,7 @@ export default {
         this.afterEditBudgetEntry(budgetEntry)
       },
 
-      'budget-entry:delete': async function (data) {
+      async 'budget-entry:delete'(data) {
         if (data.project_id !== this.currentProduction.id) return
         if (data.budget_id !== this.currentBudget.id) return
         const oldBudgetEntry = this.budgetEntries.find(

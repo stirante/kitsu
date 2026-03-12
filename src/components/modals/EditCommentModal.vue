@@ -25,9 +25,11 @@
               {{ $t('comments.text') }}
             </label>
             <at-ta
-              :members="atOptions"
+              :ats="['#', '@']"
+              :members="[...membersForAts['@'], ...membersForAts['#']]"
               name-key="full_name"
               limit="2"
+              :filter-match="atOptionsFilter"
               @update:value="onAtTextChanged"
             >
               <template #item="{ item }">
@@ -45,6 +47,16 @@
                     &nbsp;
                   </span>
                   {{ item.full_name }}
+                </template>
+                <template v-else-if="item.isTaskType">
+                  <task-type-name
+                    :task-type="{
+                      color: item.color,
+                      name: item.full_name
+                    }"
+                    :is-link="false"
+                    thin
+                  />
                 </template>
                 <template v-else>
                   <div class="flexrow">
@@ -172,6 +184,7 @@ import FileUpload from '@/components/widgets/FileUpload.vue'
 import ModalFooter from '@/components/modals/ModalFooter.vue'
 import PeopleAvatar from '@/components/widgets/PeopleAvatar.vue'
 import TextField from '@/components/widgets/TextField.vue'
+import TaskTypeName from '@/components/widgets/TaskTypeName.vue'
 
 export default {
   name: 'edit-comment-modal',
@@ -185,6 +198,7 @@ export default {
     FileUpload,
     ModalFooter,
     PeopleAvatar,
+    TaskTypeName,
     TextField,
     XIcon
   },
@@ -210,6 +224,10 @@ export default {
       type: Boolean,
       default: false
     },
+    taskTypes: {
+      type: Array,
+      default: () => []
+    },
     team: {
       type: Array,
       default: () => []
@@ -228,6 +246,7 @@ export default {
 
   data() {
     return {
+      membersForAts: { '@': [], '#': [] },
       attachmentFiles: [],
       extensions: files.ALL_EXTENSIONS_STRING,
       form: {
@@ -265,8 +284,8 @@ export default {
     isValidForm() {
       return Boolean(
         !this.isPreviewsComment ||
-          !this.form.link ||
-          this.$refs['input-link']?.checkValidity()
+        !this.form.link ||
+        this.$refs['input-link']?.checkValidity()
       )
     }
   },
@@ -344,6 +363,15 @@ export default {
       }
     },
 
+    atOptionsFilter(name, chunk, at, v) {
+      // filter the list by the given at symbol
+      const option_at = v?.isTaskType ? '#' : '@'
+      // @ for team, # for task type
+      if (at !== option_at) return false
+      // match at lower-case
+      return name?.toLowerCase().indexOf(chunk.toLowerCase()) > -1
+    },
+
     onAtTextChanged(input) {
       if (input.includes('@frame')) {
         this.form.text = replaceTimeWithTimecode(
@@ -370,18 +398,43 @@ export default {
       }
     },
 
+    taskTypes: {
+      deep: true,
+      immediate: true,
+      handler(values) {
+        const taskTypeOptions = values.map(taskType => {
+          return {
+            isTaskType: true,
+            full_name: taskType.name,
+            color: taskType.color,
+            id: taskType.id,
+            url: taskType.url
+          }
+        })
+        taskTypeOptions.push({
+          isTaskType: true,
+          color: '#000',
+          full_name: 'All'
+        })
+        this.membersForAts['#'] = taskTypeOptions
+      }
+    },
+
     team: {
       deep: true,
       immediate: true,
       handler() {
+        let teamOptions
         if (this.isCurrentUserClient) {
-          this.atOptions = this.team.filter(person =>
-            ['admin', 'manager', 'supervisor', 'client'].includes(person.role)
-          )
+          teamOptions = [
+            this.team.filter(person =>
+              ['admin', 'manager', 'supervisor', 'client'].includes(person.role)
+            )
+          ]
         } else {
-          this.atOptions = [...this.team]
+          teamOptions = [...this.team]
         }
-        this.atOptions = this.atOptions.concat(
+        teamOptions = teamOptions.concat(
           this.productionDepartmentIds.map(departmentId => {
             const department = this.departmentMap.get(departmentId)
             return {
@@ -392,10 +445,11 @@ export default {
             }
           })
         )
-        this.atOptions.push({
+        teamOptions.push({
           isTime: true,
           full_name: 'frame'
         })
+        this.membersForAts['@'] = teamOptions
       }
     }
   }

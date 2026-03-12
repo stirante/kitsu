@@ -28,7 +28,7 @@
             v-if="isAssetCasting"
           />
           <span class="filler"></span>
-          <show-infos-button class="flexrow-item" :is-breakdown="true" />
+          <show-infos-button class="flexrow-item" />
           <button-simple
             class="flexrow-item"
             :title="
@@ -336,7 +336,6 @@
                 @add-one="addOneAsset"
                 @add-ten="addTenAssets"
                 v-for="asset in typeAssets"
-                v-show="libraryDisplayed || !asset.shared"
               />
             </div>
           </div>
@@ -498,8 +497,7 @@ export default {
         editLabel: false,
         importing: false,
         importingError: null,
-        remove: false,
-        stay: false
+        remove: false
       },
       loading: {
         edit: false,
@@ -619,8 +617,7 @@ export default {
       const result = []
       this.assetsByType.forEach(typeGroup => {
         let newGroup = typeGroup.filter(
-          asset =>
-            !asset.canceled && (!asset.is_shared || this.libraryDisplayed)
+          asset => !asset.canceled && (!asset.shared || this.libraryDisplayed)
         )
         if (this.isTVShow && this.isOnlyCurrentEpisode) {
           newGroup = typeGroup.filter(asset => {
@@ -698,10 +695,6 @@ export default {
         }
       })
       return castingAssetTypes.sort()
-    },
-
-    editLabelModal() {
-      return this.$refs['edit-label-modal']
     },
 
     filteredCasting() {
@@ -809,8 +802,10 @@ export default {
 
     async reloadEntities() {
       this.isLoading = true
-      await this.loadSequences()
-      await this.loadShots()
+      if (!this.isTVShow || this.currentEpisode?.id !== 'main') {
+        await this.loadSequences()
+        await this.loadShots()
+      }
       if (this.isTVShow) {
         if (this.currentEpisode) {
           this.episodeId = this.currentEpisode.id
@@ -826,7 +821,10 @@ export default {
         this.setCastingAssetTypes()
         if (this.assetTypeId) {
           this.setCastingAssetType(this.assetTypeId)
-        } else {
+        } else if (
+          !this.isTVShow ||
+          (this.episodeId && !['main', 'all'].includes(this.episodeId))
+        ) {
           this.setCastingSequence(this.sequenceId || 'all')
         }
         this.resetSequenceOption()
@@ -923,9 +921,10 @@ export default {
       const previousIndex = keys.findIndex(k => k === previousEntityId)
       const index = keys.findIndex(k => k === entityId)
 
-      let indexRange = []
-      if (previousIndex < index) indexRange = range(previousIndex, index)
-      else indexRange = range(index, previousIndex)
+      const indexRange =
+        previousIndex < index
+          ? range(previousIndex, index)
+          : range(index, previousIndex)
 
       indexRange.forEach(i => {
         if (i >= 0) this.selection[keys[i]] = true
@@ -1303,8 +1302,8 @@ export default {
     },
 
     descriptorCurrentDepartments(descriptor) {
-      const departemts = descriptor.departments || []
-      return departemts.map(departmentId =>
+      const departments = descriptor.departments || []
+      return departments.map(departmentId =>
         this.departmentMap.get(departmentId)
       )
     },
@@ -1591,7 +1590,7 @@ export default {
     episodeId() {
       if (this.episodeId && this.episodes && this.episodes.length > 0) {
         if (this.episodeId === 'all') {
-          this.setCastingForProductionEpisodes(this.episodeId)
+          this.setCastingForProductionEpisodes()
         }
         this.resetSelection()
       }
@@ -1649,9 +1648,8 @@ export default {
       this.$store.commit('CASTING_SET_SEQUENCES', this.displayedSequences)
     },
 
-    '$route.query.search'() {
-      this.setSearchFromUrl()
-      const search = this.searchField.getValue()
+    '$route.query.search'(search) {
+      this.searchField?.setValue(search)
       this.onSearchChange(search)
     }
   },

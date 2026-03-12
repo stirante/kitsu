@@ -133,11 +133,20 @@ const entityMetadataDescriptors = entityType => (state, getters) => {
   if (!state.currentProduction || !state.currentProduction.descriptors) {
     return []
   } else {
-    return sortByName(
-      state.currentProduction.descriptors.filter(
-        d => d.entity_type === entityType
-      )
+    const descriptors = state.currentProduction.descriptors.filter(
+      d => d.entity_type === entityType
     )
+    return descriptors.sort((a, b) => {
+      const positionA = a.position ?? 1000
+      const positionB = b.position ?? 1000
+      if (positionA !== positionB) {
+        return positionA - positionB
+      } else {
+        const nameA = a.name || ''
+        const nameB = b.name || ''
+        return nameA.localeCompare(nameB)
+      }
+    })
   }
 }
 
@@ -173,9 +182,9 @@ const getters = {
       return rootState.assetTypes.assetTypes
     } else {
       return sortByName(
-        state.currentProduction.asset_types.map(id =>
-          assetTypeStore.cache.assetTypeMap.get(id)
-        )
+        state.currentProduction.asset_types
+          .map(id => assetTypeStore.cache.assetTypeMap.get(id))
+          .filter(Boolean)
       )
     }
   },
@@ -186,9 +195,9 @@ const getters = {
 
   getProductionBackgrounds: (state, rootState) => id => {
     const production = state.productionMap.get(id)
-    const backgrounds = production?.preview_background_files?.map(id =>
-      rootState.backgroundMap.get(id)
-    )
+    const backgrounds = production?.preview_background_files
+      ?.map(id => rootState.backgroundMap.get(id))
+      .filter(Boolean)
     return backgrounds ? sortByName(backgrounds) : []
   },
 
@@ -197,9 +206,9 @@ const getters = {
       return rootState.taskStatus.taskStatuses
     } else {
       return sortByName(
-        state.currentProduction.task_statuses.map(id =>
-          taskStatusCache.taskStatusMap.get(id)
-        )
+        state.currentProduction.task_statuses
+          .map(id => taskStatusCache.taskStatusMap.get(id))
+          .filter(Boolean)
       )
     }
   },
@@ -210,9 +219,9 @@ const getters = {
       return rootState.taskStatus.taskStatuses
     } else {
       return sortByName(
-        production.task_statuses.map(id =>
-          taskStatusCache.taskStatusMap.get(id)
-        )
+        production.task_statuses
+          .map(id => taskStatusCache.taskStatusMap.get(id))
+          .filter(Boolean)
       )
     }
   },
@@ -221,9 +230,9 @@ const getters = {
     if (helpers.isEmptyArray(state.currentProduction, 'status_automations')) {
       return []
     } else {
-      return state.currentProduction.status_automations.map(id =>
-        statusAutomationsStore.cache.statusAutomationMap.get(id)
-      )
+      return state.currentProduction.status_automations
+        .map(id => statusAutomationsStore.cache.statusAutomationMap.get(id))
+        .filter(Boolean)
     }
   },
 
@@ -240,9 +249,9 @@ const getters = {
       return rootState.taskTypes.taskTypes
     } else {
       return sortByName(
-        state.currentProduction.task_types.map(id =>
-          taskTypesCache.taskTypeMap.get(id)
-        )
+        state.currentProduction.task_types
+          .map(id => taskTypesCache.taskTypeMap.get(id))
+          .filter(Boolean)
       )
     }
   },
@@ -253,7 +262,9 @@ const getters = {
       return rootState.taskTypes.taskTypes
     } else {
       return sortByName(
-        production.task_types.map(id => taskTypesCache.taskTypeMap.get(id))
+        production.task_types
+          .map(id => taskTypesCache.taskTypeMap.get(id))
+          .filter(Boolean)
       )
     }
   },
@@ -327,13 +338,14 @@ const getters = {
 }
 
 const actions = {
-  loadProductionStatus({ commit, state }, callback) {
+  async loadProductionStatus({ commit }) {
     commit(LOAD_PRODUCTION_STATUS_START)
-    productionsApi.getProductionStatus((err, productionStatus) => {
-      if (err) commit(LOAD_PRODUCTION_STATUS_ERROR)
-      else commit(LOAD_PRODUCTION_STATUS_END, productionStatus)
-      if (callback) callback(err)
-    })
+    try {
+      const productionStatus = await productionsApi.getProductionStatus()
+      commit(LOAD_PRODUCTION_STATUS_END, productionStatus)
+    } catch (err) {
+      commit(LOAD_PRODUCTION_STATUS_ERROR)
+    }
   },
 
   async loadOpenProductions({ commit }) {
@@ -346,13 +358,14 @@ const actions = {
     }
   },
 
-  loadProductions({ commit, state }, callback) {
+  async loadProductions({ commit }) {
     commit(LOAD_PRODUCTIONS_START)
-    productionsApi.getProductions((err, productions) => {
-      if (err) commit(LOAD_PRODUCTIONS_ERROR)
-      else commit(LOAD_PRODUCTIONS_END, productions)
-      if (callback) callback(err)
-    })
+    try {
+      const productions = await productionsApi.getProductions()
+      commit(LOAD_PRODUCTIONS_END, productions)
+    } catch (err) {
+      commit(LOAD_PRODUCTIONS_ERROR)
+    }
   },
 
   loadProduction({ commit, state }, productionId) {
@@ -549,6 +562,24 @@ const actions = {
             descriptor
           })
         }
+      })
+  },
+
+  reorderMetadataDescriptors({ commit, state }, { entityType, descriptorIds }) {
+    return productionsApi
+      .reorderMetadataDescriptors(
+        state.currentProduction.id,
+        entityType,
+        descriptorIds
+      )
+      .then(updatedDescriptors => {
+        updatedDescriptors.forEach(descriptor => {
+          commit(UPDATE_METADATA_DESCRIPTOR_END, {
+            production: state.currentProduction,
+            descriptor
+          })
+        })
+        return updatedDescriptors
       })
   },
 

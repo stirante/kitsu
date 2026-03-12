@@ -51,7 +51,6 @@
           <combobox-department
             class="flexrow-item"
             :label="$t('people.import_from_department')"
-            :department-list="departments"
             :with-empty-choice="false"
             v-model="importDepartmentId"
           />
@@ -154,9 +153,9 @@ export default {
 
     teamPersons() {
       return sortPeople(
-        this.currentProduction.team.map(personId =>
-          this.personMap.get(personId)
-        )
+        this.currentProduction.team
+          .map(personId => this.personMap.get(personId))
+          .filter(Boolean)
       )
     },
 

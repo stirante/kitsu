@@ -3,9 +3,9 @@
     <div
       class="has-text-centered mt2 loading-info xyz-in"
       xyz="fade"
-      v-if="user && isDataLoading"
+      v-if="isDataLoading"
     >
-      <span>{{ $t('main.loading_data') }}...</span>
+      {{ $t('main.loading_data') }}...
       <spinner class="mt2" />
     </div>
     <router-view v-else />
@@ -25,9 +25,16 @@ import { mapGetters, mapActions } from 'vuex'
 import PreviewModal from '@/components/modals/PreviewModal.vue'
 import Spinner from '@/components/widgets/Spinner.vue'
 
+import auth from '@/lib/auth'
 import crisp from '@/lib/crisp'
 import localPreferences from '@/lib/preferences'
 import sentry from '@/lib/sentry'
+
+import assetsStore from '@/store/modules/assets.js'
+import shotsStore from '@/store/modules/shots.js'
+import editStore from '@/store/modules/edits.js'
+import episodeStore from '@/store/modules/episodes.js'
+import sequenceStore from '@/store/modules/sequences.js'
 
 export default {
   name: 'app',
@@ -39,13 +46,10 @@ export default {
 
   computed: {
     ...mapGetters([
-      'assetMap',
       'assetTypeMap',
       'currentEpisode',
       'currentProduction',
       'departmentMap',
-      'editMap',
-      'episodeMap',
       'todoMap',
       'isCurrentUserAdmin',
       'isDataLoading',
@@ -56,14 +60,32 @@ export default {
       'previewFileIdToShow',
       'personMap',
       'productionMap',
-      'sequenceMap',
-      'shotMap',
       'taskComments',
       'taskMap',
       'taskStatusMap',
       'taskTypeMap',
       'user'
-    ])
+    ]),
+
+    assetMap() {
+      return assetsStore.cache.assetMap
+    },
+
+    shotMap() {
+      return shotsStore.cache.shotMap
+    },
+
+    editMap() {
+      return editStore.cache.editMap
+    },
+
+    episodeMap() {
+      return episodeStore.cache.episodeMap
+    },
+
+    sequenceMap() {
+      return sequenceStore.cache.sequenceMap
+    }
   },
 
   async mounted() {
@@ -71,6 +93,7 @@ export default {
     this.setupDarkTheme()
     this.setupCrisp(config)
     this.setupSentry(config)
+    this.setupAuthChannel()
   },
 
   methods: {
@@ -101,13 +124,13 @@ export default {
       }
 
       const personId = eventData.person_id
-      const selectedTaskIds = [eventData.task_id]
+      const taskIds = [eventData.task_id]
 
       // for entity lists
       if (assign) {
-        this.$store.commit('ASSIGN_TASKS', { selectedTaskIds, personId })
+        this.$store.commit('ASSIGN_TASKS', { taskIds, personId })
       } else {
-        this.$store.commit('UNASSIGN_TASKS', selectedTaskIds)
+        this.$store.commit('UNASSIGN_TASKS', taskIds)
       }
     },
 
@@ -122,12 +145,12 @@ export default {
 
     setupCrisp(config) {
       if (config.crisp_token?.length) {
+        crisp.init(config.crisp_token)
         const supportChat = localPreferences.getBoolPreference(
           'support:show',
           true
         )
         this.setSupportChat(supportChat)
-        crisp.init(config.crisp_token)
       }
     },
 
@@ -138,6 +161,19 @@ export default {
           dsn: config.sentry.dsn,
           sampleRate: config.sentry.sampleRate
         })
+      }
+    },
+
+    setupAuthChannel() {
+      if (auth.getBroadcastChannel()) {
+        auth.getBroadcastChannel().onmessage = event => {
+          if (this.$route.name !== 'login' && event.data === 'logout') {
+            this.$router.push({
+              name: 'login',
+              query: { redirect: this.$route.fullPath }
+            })
+          }
+        }
       }
     }
   },
@@ -209,7 +245,8 @@ export default {
       },
 
       'sequence:update'(eventData) {
-        if (this.sequenceMap.get(eventData.sequence_id)) {
+        const sequence = this.sequenceMap.get(eventData.sequence_id)
+        if (sequence && !sequence.lock) {
           this.loadSequence(eventData.sequence_id)
         }
       },
@@ -230,7 +267,8 @@ export default {
       },
 
       'edit:update'(eventData) {
-        if (this.editMap.get(eventData.edit_id)) {
+        const edit = this.editMap.get(eventData.edit_id)
+        if (edit && !edit.lock) {
           this.loadEdit(eventData.edit_id)
         }
       },
@@ -251,7 +289,8 @@ export default {
       },
 
       'episode:update'(eventData) {
-        if (this.episodeMap.get(eventData.episode_id)) {
+        const episode = this.episodeMap.get(eventData.episode_id)
+        if (episode && !episode.lock) {
           this.loadEpisode(eventData.episode_id)
         }
       },
@@ -275,8 +314,10 @@ export default {
       },
 
       'shot:update'(eventData) {
+        const shot = this.shotMap.get(eventData.shot_id)
         if (
-          this.shotMap.get(eventData.shot_id) &&
+          shot &&
+          !shot.lock &&
           this.currentProduction?.id === eventData.project_id
         ) {
           this.loadShot(eventData.shot_id)
@@ -301,7 +342,8 @@ export default {
       },
 
       'asset:update'(eventData) {
-        if (this.assetMap.get(eventData.asset_id)) {
+        const asset = this.assetMap.get(eventData.asset_id)
+        if (asset && !asset.lock) {
           this.loadAsset(eventData.asset_id)
         }
       },
@@ -716,10 +758,6 @@ body {
   }
 } // End dark theme
 
-.loading-info {
-  background: white;
-}
-
 .hidden {
   display: none !important;
 }
@@ -799,6 +837,7 @@ h2 {
     background-color: $grey-strong;
     border: 1px solid $white;
     border-radius: 3px;
+    white-space: nowrap;
   }
 }
 
@@ -865,7 +904,7 @@ tr .actions p {
 
 tr td.actions button,
 tr td.actions a {
-  opacity: 0;
+  visibility: hidden;
   color: #999;
 }
 
@@ -875,7 +914,29 @@ tr th.actions a {
 
 tr:hover .actions button,
 tr:hover .actions a {
-  opacity: 1;
+  visibility: visible;
+}
+tr:hover .actions.datatable-row-footer {
+  position: sticky;
+  right: 0;
+  border-left: 1px solid rgba(var(--border-rgb), 0.5);
+
+  &::before {
+    content: '';
+    display: block;
+    position: absolute;
+    right: calc(100% + 1px);
+    top: 0;
+    bottom: 0;
+    width: 0.75rem;
+    background: linear-gradient(
+      270deg,
+      rgba(var(--border-rgb), 0.4) 0%,
+      rgba(var(--border-rgb), 0.3) 20%,
+      rgba(var(--border-rgb), 0.2) 50%,
+      rgba(var(--border-rgb), 0) 100%
+    );
+  }
 }
 
 a {
@@ -1336,13 +1397,11 @@ textarea.input:focus {
   }
 
   th:hover .header-icon {
-    opacity: 100;
+    visibility: visible;
   }
 
   .header-icon {
-    width: 15px;
-    cursor: pointer;
-    opacity: 0;
+    visibility: hidden;
   }
 }
 
@@ -1562,7 +1621,7 @@ tbody:last-child .empty-line:last-child {
     }
 
     &:hover .header-icon {
-      opacity: 1;
+      visibility: visible;
     }
 
     .descriptor-name {
@@ -1605,9 +1664,7 @@ tbody:last-child .empty-line:last-child {
     z-index: 4;
   }
   .header-icon {
-    width: 15px;
-    cursor: pointer;
-    opacity: 0;
+    visibility: hidden;
   }
 }
 
@@ -1628,7 +1685,8 @@ tbody:last-child .empty-line:last-child {
   }
 
   &:hover,
-  &:hover .datatable-row-header {
+  &:hover .datatable-row-header,
+  &:hover .datatable-row-footer {
     background-color: var(--background-hover);
   }
 
@@ -1641,7 +1699,8 @@ tbody:last-child .empty-line:last-child {
     cursor: pointer;
 
     &:hover,
-    &:hover .datatable-row-header {
+    &:hover .datatable-row-header,
+    &:hover .datatable-row-footer {
       background: var(--background-selectable);
     }
   }
@@ -1651,7 +1710,8 @@ tbody:last-child .empty-line:last-child {
     & .datatable-row-header,
     &:hover,
     &:hover .datatable-row-header--no-bd,
-    &:hover .datatable-row-header {
+    &:hover .datatable-row-header,
+    &:hover .datatable-row-footer {
       background-color: var(--background-selected);
     }
   }
@@ -1756,6 +1816,7 @@ tbody:last-child .empty-line:last-child {
 
   th {
     padding: 1.5rem 0 0.5rem;
+    left: 0;
 
     span,
     div {
@@ -1852,6 +1913,24 @@ td.fps {
 .ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+@mixin ellipsis-line-clamp($lines) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ellipsis-2-lines {
+  @include ellipsis-line-clamp(2);
+}
+.ellipsis-3-lines {
+  @include ellipsis-line-clamp(3);
+}
+.ellipsis-4-lines {
+  @include ellipsis-line-clamp(4);
 }
 
 .header-icon {
@@ -2287,7 +2366,7 @@ th.validation-cell {
   padding: 0.5em;
 }
 
-// Ludice Icons
+// Lucide Icons
 .icon-1x {
   width: 1em;
   height: 1em;
@@ -2325,6 +2404,38 @@ th.validation-cell {
 #app .datatable .dp__input {
   border-radius: 3px;
   height: 43px;
+}
+
+#app .v3-emoji-picker.v3-color-theme-dark .v3-sticky {
+  text-transform: uppercase;
+  font-size: 0.8em;
+  color: var(--text);
+}
+
+#app .dark .v3-emoji-picker.v3-color-theme-dark {
+  background: var(--background-alt);
+  border: 2px solid var(--border);
+}
+#app .dark .v3-emoji-picker.v3-color-theme-dark .v3-sticky {
+  background: var(--background-alt);
+}
+#app
+  .dark
+  .v3-emoji-picker
+  .v3-body
+  .v3-body-inner
+  .v3-group
+  .v3-emojis
+  button:hover {
+  background: var(--background);
+}
+
+#app .dark .v3-emoji-picker .v3-search input {
+  background: var(--background);
+}
+
+#app .v3-emoji-picker .v3-footer .v3-tone .v3-icon {
+  border-radius: 50%;
 }
 
 @media screen and (max-width: 768px) {
@@ -2401,6 +2512,19 @@ th.validation-cell {
 
   ::-webkit-scrollbar-thumb:active {
     background-color: #5e6169;
+  }
+  .block {
+    ::-webkit-scrollbar-thumb {
+      background-color: #53565e;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: #5e6169;
+    }
+
+    ::-webkit-scrollbar-thumb:active {
+      background-color: #5e6169;
+    }
   }
 }
 </style>

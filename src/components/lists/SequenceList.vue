@@ -51,7 +51,7 @@
                 />
               </div>
             </th>
-            <template v-if="isShowInfos">
+            <template v-if="displaySettings.showInfos">
               <metadata-header
                 :ref="`editor-${j}`"
                 :key="descriptor.id"
@@ -94,7 +94,9 @@
               scope="col"
               class="description selectable"
               v-if="
-                !isCurrentUserClient && isShowInfos && isSequenceDescription
+                !isCurrentUserClient &&
+                displaySettings.showInfos &&
+                isSequenceDescription
               "
             >
               {{ $t('sequences.fields.description') }}
@@ -103,12 +105,12 @@
             <th
               scope="col"
               class="resolution"
-              v-if="isSequenceResolution && isShowInfos"
+              v-if="isSequenceResolution && displaySettings.showInfos"
             >
               {{ $t('shots.fields.resolution') }}
             </th>
 
-            <template v-if="isShowInfos">
+            <template v-if="displaySettings.showInfos">
               <metadata-header
                 :key="descriptor.id"
                 :descriptor="descriptor"
@@ -124,7 +126,7 @@
               ref="th-spent"
               v-if="
                 !isCurrentUserClient &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isSequenceTime &&
                 metadataDisplayHeaders.timeSpent
               "
@@ -138,7 +140,7 @@
               ref="th-spent"
               v-if="
                 !isCurrentUserClient &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isSequenceEstimation &&
                 metadataDisplayHeaders.estimation
               "
@@ -188,19 +190,26 @@
                 namespace="sequences"
                 v-model="metadataDisplayHeaders"
                 v-show="columnSelectorDisplayed"
-                v-if="isShowInfos"
+                v-if="displaySettings.showInfos"
               />
 
               <button-simple
                 class="is-small is-pulled-right mr05"
                 icon="down"
                 @click="toggleColumnSelector"
-                v-if="sequenceMetadataDescriptors.length > 0 && isShowInfos"
+                v-if="
+                  sequenceMetadataDescriptors.length > 0 &&
+                  displaySettings.showInfos
+                "
               />
             </th>
           </tr>
         </thead>
-        <tbody class="datatable-body">
+        <tbody
+          class="datatable-body"
+          @mousedown="startBrowsing"
+          @touchstart="startBrowsing"
+        >
           <template v-if="!isLoading && isListVisible">
             <tr
               class="datatable-row"
@@ -220,23 +229,27 @@
                 <div class="flexrow">
                   <entity-thumbnail
                     :entity="sequence"
-                    :width="isBigThumbnails ? 150 : 50"
-                    :height="isBigThumbnails ? 100 : 33"
-                    :empty-width="isBigThumbnails ? 150 : 50"
-                    :empty-height="isBigThumbnails ? 100 : 34"
+                    :width="displaySettings.bigThumbnails ? 150 : 50"
+                    :height="displaySettings.bigThumbnails ? 100 : 33"
+                    :empty-width="displaySettings.bigThumbnails ? 150 : 50"
+                    :empty-height="displaySettings.bigThumbnails ? 100 : 34"
                   />
                   <router-link
                     tabindex="-1"
                     :title="sequence.name"
                     :to="sequencePath(sequence.id)"
+                    v-if="!isCurrentUserClient"
                   >
                     {{ sequence.name }}
                   </router-link>
+                  <template v-else>
+                    {{ sequence.name }}
+                  </template>
                 </div>
               </th>
 
               <!-- Metadata stick -->
-              <template v-if="isShowInfos && !isLoading">
+              <template v-if="displaySettings.showInfos && !isLoading">
                 <td
                   :ref="`editor-${i}-${j}`"
                   class="metadata-descriptor datatable-row-header"
@@ -270,11 +283,11 @@
                     'hidden-validation-cell': hiddenColumns[columnId],
                     'datatable-row-header': true
                   }"
-                  :contact-sheet="contactSheetMode"
+                  :contact-sheet="displaySettings.contactSheetMode"
                   :column="taskTypeMap.get(columnId)"
                   :column-y="j"
                   :entity="sequence"
-                  :is-assignees="isShowAssignations"
+                  :is-assignees="displaySettings.showAssignations"
                   :is-static="true"
                   :left="
                     offsets['validation-' + j]
@@ -300,11 +313,16 @@
                   value => onDescriptionChanged(sequence, value)
                 "
                 v-if="
-                  !isCurrentUserClient && isShowInfos && isSequenceDescription
+                  !isCurrentUserClient &&
+                  displaySettings.showInfos &&
+                  isSequenceDescription
                 "
               />
 
-              <td class="resolution" v-if="isSequenceResolution && isShowInfos">
+              <td
+                class="resolution"
+                v-if="isSequenceResolution && displaySettings.showInfos"
+              >
                 <input
                   :class="{
                     'input-editor': true,
@@ -342,7 +360,7 @@
               </td>
 
               <!-- other Metadata cells -->
-              <template v-if="isShowInfos">
+              <template v-if="displaySettings.showInfos">
                 <td
                   class="metadata-descriptor"
                   :title="
@@ -366,7 +384,7 @@
                 class="time-spent selectable"
                 v-if="
                   !isCurrentUserClient &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   isSequenceTime &&
                   metadataDisplayHeaders.timeSpent
                 "
@@ -378,7 +396,7 @@
                 class="estimation selectable"
                 v-if="
                   !isCurrentUserClient &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   isSequenceEstimation &&
                   metadataDisplayHeaders.estimation
                 "
@@ -395,7 +413,7 @@
                     'validation-cell': !hiddenColumns[columnId],
                     'hidden-validation-cell': hiddenColumns[columnId]
                   }"
-                  :contact-sheet="contactSheetMode"
+                  :contact-sheet="displaySettings.contactSheetMode"
                   :key="`${columnId}-${sequence.id}`"
                   :column="taskTypeMap.get(columnId)"
                   :entity="sequence"
@@ -412,7 +430,7 @@
                   "
                   :row-x="i"
                   :column-y="j"
-                  :is-assignees="isShowAssignations"
+                  :is-assignees="displaySettings.showAssignations"
                   @select="onTaskSelected"
                   @unselect="onTaskUnselected"
                   v-for="(columnId, j) in nonStickedDisplayedValidationColumns"
@@ -448,20 +466,32 @@
       {{ $tc('sequences.number', displayedSequencesLength) }}
       <span
         v-if="
-          displayedSequencesTimeSpent > 0 && displayedSequencesEstimation > 0
+          displayedSequencesTimeSpent > 0 || displayedSequencesEstimation > 0
         "
       >
         ({{ formatDuration(displayedSequencesTimeSpent) }}
         {{
           isDurationInHours
-            ? $tc('main.hours_spent', displayedSequencesTimeSpent)
-            : $tc('main.days_spent', displayedSequencesTimeSpent)
+            ? $tc(
+                'main.hours_spent',
+                formatDuration(displayedSequencesTimeSpent, false)
+              )
+            : $tc(
+                'main.days_spent',
+                formatDuration(displayedSequencesTimeSpent, false)
+              )
         }},
         {{ formatDuration(displayedSequencesEstimation) }}
         {{
           isDurationInHours
-            ? $tc('main.hours_estimated', displayedSequencesEstimation)
-            : $tc('main.man_days', displayedSequencesEstimation)
+            ? $tc(
+                'main.hours_estimated',
+                formatDuration(displayedSequencesEstimation, false)
+              )
+            : $tc(
+                'main.man_days',
+                formatDuration(displayedSequencesEstimation, false)
+              )
         }})
       </span>
     </p>
@@ -503,9 +533,9 @@ export default {
   ],
 
   props: {
-    contactSheetMode: {
-      type: Boolean,
-      default: false
+    displaySettings: {
+      type: Object,
+      default: () => ({})
     },
     displayedSequences: {
       type: Array,
@@ -545,7 +575,16 @@ export default {
         timeSpent: true
       },
       offsets: {},
-      stickedColumns: {}
+      stickedColumns: {},
+      domEvents: [
+        ['mousemove', this.onMouseMove],
+        ['touchmove', this.onMouseMove],
+        ['mouseup', this.stopBrowsing],
+        ['mouseleave', this.stopBrowsing],
+        ['touchend', this.stopBrowsing],
+        ['touchcancel', this.stopBrowsing],
+        ['keyup', this.stopBrowsing]
+      ]
     }
   },
 
@@ -572,7 +611,7 @@ export default {
       'displayedSequencesEstimation',
       'displayedSequencesLength',
       'displayedSequencesTimeSpent',
-      'isBigThumbnails',
+      'displaySettings.bigThumbnails',
       'isCurrentUserAdmin',
       'isCurrentUserManager',
       'isCurrentUserSupervisor',
@@ -582,8 +621,6 @@ export default {
       'isSequenceEstimation',
       'isSequenceResolution',
       'isSequenceTime',
-      'isShowAssignations',
-      'isShowInfos',
       'nbSelectedTasks',
       'selectedTasks',
       'sequenceMap',
@@ -614,38 +651,11 @@ export default {
       )
     },
 
-    visibleColumns() {
-      let count = 2
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isSequenceDescription
-          ? 1
-          : 0
-      count += this.visibleMetadataDescriptors.length
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isSequenceTime &&
-        this.metadataDisplayHeaders.timeSpent
-          ? 1
-          : 0
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isSequenceEstimation &&
-        this.metadataDisplayHeaders.estimation
-          ? 1
-          : 0
-      count += this.displayedValidationColumns.length
-      return count
-    },
-
     displayedValidationColumns() {
       return this.validationColumns.filter(columnId => {
         return (
           this.sequenceFilledColumns[columnId] &&
-          (!this.hiddenColumns[columnId] || this.isShowInfos)
+          (!this.hiddenColumns[columnId] || this.displaySettings.showInfos)
         )
       })
     },
@@ -655,7 +665,7 @@ export default {
     },
 
     localStorageStickKey() {
-      return `stick-sequences-${this.currentProduction.id}`
+      return `stick-sequences-${this.currentProduction?.id}`
     }
   },
 
@@ -674,7 +684,7 @@ export default {
     },
 
     getPath(section, sequenceId) {
-      const productionId = this.currentProduction.id
+      const productionId = this.currentProduction?.id
       const episodeId = this.currentEpisode ? this.currentEpisode.id : null
       return getEntityPath(sequenceId, productionId, section, episodeId)
     }
@@ -694,10 +704,6 @@ export default {
     },
 
     isLoading() {
-      this.updateOffsets()
-    },
-
-    isBigThumbnails() {
       this.updateOffsets()
     }
   }
@@ -800,10 +806,6 @@ span.thumbnail-empty {
   padding: 6px;
 }
 
-.datatable-row-header {
-  cursor: pointer;
-}
-
 th .input-editor,
 td .input-editor {
   color: $grey-strong;
@@ -894,6 +896,6 @@ td .select {
 }
 
 .metadata-value {
-  padding: 0.8rem;
+  padding: 0.5rem 0.75rem;
 }
 </style>

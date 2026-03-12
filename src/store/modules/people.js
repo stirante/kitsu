@@ -3,7 +3,7 @@ import colors from '@/lib/colors'
 import { clearSelectionGrid } from '@/lib/selection'
 import { populateTask } from '@/lib/models'
 import { sortTasks, sortPeople, sortByName } from '@/lib/sorting'
-import { indexSearch, buildTaskIndex, buildNameIndex } from '@/lib/indexing'
+import { indexSearch, buildTaskIndex, buildPeopleIndex } from '@/lib/indexing'
 import { applyFilters, getFilters, getKeyWords } from '@/lib/filtering'
 import auth from '@/lib/auth'
 
@@ -34,7 +34,6 @@ import {
   CLEAR_SELECTED_TASKS,
   SET_TIME_SPENT,
   PEOPLE_TIMESHEET_LOADED,
-  PERSON_SET_DAY_OFF,
   PERSON_LOAD_TIME_SPENTS_END,
   SET_ORGANISATION,
   SET_PERSON_TASKS_SCROLL_POSITION,
@@ -79,6 +78,11 @@ const helpers = {
       const timestamp = Date.parse(lastUpdate)
       person.avatarPath = `/api/pictures/thumbnails/persons/${person.id}.png?t=${timestamp}`
     }
+
+    if (!person.departments) {
+      person.departments = []
+    }
+
     return person
   },
 
@@ -179,13 +183,6 @@ const getters = {
   displayedPeople: state => state.displayedPeople,
   peopleIndex: state => cache.peopleIndex,
   personMap: state => cache.personMap,
-  personEmailMap: state => {
-    const emailMap = new Map()
-    cache.people.forEach(person => {
-      emailMap.set(person.email, person)
-    })
-    return emailMap
-  },
   isPeopleLoading: state => state.isPeopleLoading,
   isPeopleLoadingError: state => state.isPeopleLoadingError,
   peopleSearchQueries: state => state.peopleSearchQueries,
@@ -216,8 +213,6 @@ const getters = {
   timesheet: state => state.timesheet,
   personTimeSpentMap: state => state.personTimeSpentMap,
   personTimeSpentTotal: state => state.personTimeSpentTotal,
-  personDayOff: state => state.personDayOff,
-  personIsDayOff: state => Boolean(state.personDayOff?.id),
   dayOffMap: state => state.dayOffMap,
   daysOff: state => state.daysOff
 }
@@ -247,23 +242,17 @@ const actions = {
     commit(SET_ORGANISATION, { has_avatar: false })
   },
 
-  loadPeople({ commit, rootGetters }, callback) {
+  async loadPeople({ commit, rootGetters }) {
     commit(LOAD_PEOPLE_START)
-    peopleApi.getPeople((err, people) => {
-      if (err) {
-        commit(LOAD_PEOPLE_ERROR)
-      } else {
-        const peopleList = people.map(person => {
-          person.departments = person.departments || ''
-          return person
-        })
-        commit(LOAD_PEOPLE_END, {
-          people: peopleList,
-          userFilters: rootGetters.userFilters
-        })
-      }
-      if (callback) callback(err)
-    })
+    try {
+      const people = await peopleApi.getPeople()
+      commit(LOAD_PEOPLE_END, {
+        people,
+        userFilters: rootGetters.userFilters
+      })
+    } catch (err) {
+      commit(LOAD_PEOPLE_ERROR)
+    }
   },
 
   async loadPerson({ commit }, personId) {
@@ -372,16 +361,11 @@ const actions = {
     })
     commit(LOAD_PERSON_DONE_TASKS_END, [])
 
-    const [tasks, doneTasks, timeSpents, dayOff] = await Promise.all([
+    const [tasks, timeSpents] = await Promise.all([
       peopleApi.getPersonTasks(personId).catch(() => []),
-      peopleApi.getPersonDoneTasks(personId).catch(() => []),
-      peopleApi.getTimeSpents(personId, date),
-      peopleApi.getDayOff(personId, date)
+      peopleApi.getTimeSpents(personId, date)
     ])
-
-    commit(LOAD_PERSON_DONE_TASKS_END, doneTasks)
-    commit(PERSON_LOAD_TIME_SPENTS_END, timeSpents)
-    commit(PERSON_SET_DAY_OFF, dayOff)
+    commit(PERSON_LOAD_TIME_SPENTS_END, timeSpents || [])
     commit(LOAD_PERSON_TASKS_END, {
       personId,
       tasks,
@@ -390,9 +374,33 @@ const actions = {
     })
   },
 
+  async loadPersonDoneTasks({ commit }, personId) {
+    const doneTasks = await peopleApi
+      .getPersonDoneTasks(personId)
+      .catch(err => {
+        console.error('Error loading done tasks:', err)
+        return []
+      })
+    commit(LOAD_PERSON_DONE_TASKS_END, doneTasks || [])
+    return doneTasks
+  },
+
   async loadPersonTimeSpents({ commit }, { personId, date }) {
     const timeSpents = await peopleApi.getTimeSpents(personId, date)
     commit(PERSON_LOAD_TIME_SPENTS_END, timeSpents)
+  },
+
+  loadPersonTimeSpentsByPeriod({}, { personId, startDate, endDate }) {
+    return peopleApi.getTimeSpentsByPeriod(personId, startDate, endDate)
+  },
+
+  loadProductionTimeSpents({ rootGetters }, { taskType, startDate, endDate }) {
+    return peopleApi.getProjectTimeSpentsByTaskType(
+      rootGetters.currentProduction.id,
+      taskType.id,
+      startDate,
+      endDate
+    )
   },
 
   loadAggregatedPersonTimeSpents(
@@ -463,30 +471,14 @@ const actions = {
     commit(SET_TIME_SPENT, timeSpent)
   },
 
-  async setDayOff({ commit }, { id, personId, date, end_date, description }) {
-    let dayOff
-    if (id) {
-      dayOff = await peopleApi.updateDayOff(
-        id,
-        personId,
-        date,
-        end_date,
-        description
-      )
-    } else {
-      dayOff = await peopleApi.createDayOff(
-        personId,
-        date,
-        end_date,
-        description
-      )
-    }
-    commit(PERSON_SET_DAY_OFF, dayOff)
+  setDayOff(_, { id, personId, date, end_date, description }) {
+    return id
+      ? peopleApi.updateDayOff(id, personId, date, end_date, description)
+      : peopleApi.createDayOff(personId, date, end_date, description)
   },
 
-  async unsetDayOff({ commit }, dayOff = null) {
-    await peopleApi.deleteDayOff(dayOff || state.personDayOff)
-    commit(PERSON_SET_DAY_OFF, {})
+  async unsetDayOff(_, dayOff) {
+    await peopleApi.deleteDayOff(dayOff)
   },
 
   setPersonTasksScrollPosition({ commit }, scrollPosition) {
@@ -524,6 +516,14 @@ const actions = {
     month = year && month ? String(month).padStart(2, '0') : undefined
     const daysOff = await peopleApi.getDaysOff(year, month)
     commit(PEOPLE_SET_DAYS_OFF, daysOff)
+  },
+
+  loadProductionDaysOff({ rootGetters }, { startDate, endDate }) {
+    return peopleApi.getProjectDaysOff(
+      rootGetters.currentProduction.id,
+      startDate,
+      endDate
+    )
   },
 
   setPeopleSearch({ commit, rootGetters }, peopleSearch) {
@@ -615,7 +615,7 @@ const mutations = {
       cache.personMap.set(person.id, person)
     })
     state.displayedPeople = cache.people
-    cache.peopleIndex = buildNameIndex(cache.people)
+    cache.peopleIndex = buildPeopleIndex(cache.people)
 
     state.peopleSearchQueries = userFilters.people?.all || []
   },
@@ -628,9 +628,9 @@ const mutations = {
       if (personToDeleteIndex >= 0) {
         cache.people.splice(personToDeleteIndex, 1)
       }
-      delete cache.personMap.get(person.id)
+      cache.personMap.delete(person.id)
     }
-    cache.peopleIndex = buildNameIndex(cache.people)
+    cache.peopleIndex = buildPeopleIndex(cache.people)
     if (state.peopleSearchText) {
       const keywords = getKeyWords(state.peopleSearchText)
       state.displayedPeople = indexSearch(cache.peopleIndex, keywords)
@@ -652,7 +652,7 @@ const mutations = {
       }
       cache.personMap.set(person.id, person)
       cache.people = sortPeople(cache.people)
-      cache.peopleIndex = buildNameIndex(cache.people)
+      cache.peopleIndex = buildPeopleIndex(cache.people)
       if (state.peopleSearchText) {
         const keywords = getKeyWords(state.peopleSearchText)
         state.displayedPeople = indexSearch(cache.peopleIndex, keywords)
@@ -666,6 +666,7 @@ const mutations = {
     const person = cache.personMap.get(personId)
     person.totp_enabled = false
     person.email_otp_enabled = false
+    person.fido_enabled = false
     person.preferred_two_factor_authentication = null
   },
 
@@ -834,10 +835,6 @@ const mutations = {
         (acc, timeSpent) => timeSpent.duration + acc,
         0
       ) / 60
-  },
-
-  [PERSON_SET_DAY_OFF](state, dayOff) {
-    state.personDayOff = dayOff
   },
 
   [PEOPLE_SET_DAYS_OFF](state, daysOff) {

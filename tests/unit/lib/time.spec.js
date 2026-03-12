@@ -1,4 +1,4 @@
-import moment from 'moment'
+import moment from 'moment-timezone'
 import {
   addBusinessDays,
   daysToMinutes,
@@ -7,6 +7,7 @@ import {
   formatFullDateWithTimezone,
   formatFullDateWithRevertedTimezone,
   formatSimpleDate,
+  hoursToDays,
   getBusinessDays,
   getDayRange,
   getDatesFromEndDate,
@@ -22,7 +23,7 @@ import {
   parseDate,
   parseSimpleDate,
   range,
-  removeBusinessDays
+  removeBusinessDays,
 } from '@/lib/time'
 
 describe('time', () => {
@@ -80,9 +81,18 @@ describe('time', () => {
   })
 
   test('monthToString', () => {
+    const locale = moment.locale()
+
     expect(monthToString(1)).toEqual('Jan')
     expect(monthToString(8)).toEqual('Aug')
     expect(monthToString(12)).toEqual('Dec')
+
+    moment.locale('fr')
+    expect(monthToString(1)).toEqual('janv.')
+    expect(monthToString(8)).toEqual('août')
+    expect(monthToString(12)).toEqual('déc.')
+
+    moment.locale(locale) // restore locale after test
   })
 
   test('getMonthRange', () => {
@@ -254,9 +264,18 @@ describe('time', () => {
     expect(formatSimpleDate(removeBusinessDays(startDate, 4, daysOff))).toEqual('2019-09-30')
   })
   test('daysToMinutes', () => {
-    expect(daysToMinutes({ hours_by_day: 7 }, 8)).toEqual(7 * 8 * 60)
+    expect(daysToMinutes({ hours_by_day: 8 }, 8)).toEqual(8 * 8 * 60)
+    expect(daysToMinutes({ hours_by_day: 7 }, 8)).toEqual(8 * 7 * 60)
+    expect(daysToMinutes({ hours_by_day: 7 }, undefined)).toEqual(0)
   })
   test('minutesToDays', () => {
-    expect(minutesToDays({ hours_by_day: 7 }, 7 * 8 * 60)).toEqual(8)
+    expect(minutesToDays({ hours_by_day: 8 }, 8 * 8 * 60)).toEqual(8)
+    expect(minutesToDays({ hours_by_day: 7 }, 8 * 7 * 60)).toEqual(8)
+    expect(minutesToDays({ hours_by_day: 7 }, undefined)).toEqual(0)
+  })
+  test('hoursToDays', () => {
+    expect(hoursToDays({ hours_by_day: 8 }, 16)).toEqual(2)
+    expect(hoursToDays({ hours_by_day: 7 }, 21)).toEqual(3)
+    expect(hoursToDays({ hours_by_day: 7 }, undefined)).toEqual(0)
   })
 })

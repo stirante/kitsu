@@ -33,7 +33,6 @@
             <topbar-production-list
               :episode-id="currentEpisodeId"
               :production-list="openProductions"
-              :production="currentProduction"
               :section="currentSectionOption"
             />
           </div>
@@ -187,7 +186,12 @@
         </li>
         <li>
           <a href="https://cgwire.canny.io" target="_blank">
-            Roadmap / Feedback
+            {{ $t('main.feedback') }}
+          </a>
+        </li>
+        <li>
+          <a href="https://dev.kitsu.cloud" target="_blank">
+            {{ $t('main.developer_documentation') }}
           </a>
         </li>
         <hr />
@@ -291,10 +295,12 @@ export default {
       'lastProductionRoute',
       'lastProductionViewed',
       'mainConfig',
+      'notifications',
       'openProductions',
       'organisation',
-      'productionMap',
       'productionEditTaskTypes',
+      'productionMap',
+      'projectPlugins',
       'user'
     ]),
 
@@ -328,25 +334,11 @@ export default {
         section = this.currentProjectSection
       }
       if (this.assetSections.includes(section)) {
-        return [
-          {
-            name: '',
-            episodeList: [
-              { label: this.$t('main.all_assets'), value: 'all' },
-              { label: this.$t('main.main_pack'), value: 'main' }
-            ]
-          }
-        ].concat(this.episodeOptionGroups)
+        const episodeList = this.getBaseEpisodeOptionGroups('main.all_assets')
+        return [{ name: '', episodeList }].concat(this.episodeOptionGroups)
       } else if (['playlists'].includes(section)) {
-        return [
-          {
-            name: '',
-            episodeList: [
-              { label: this.$t('main.all_assets'), value: 'all' },
-              { label: this.$t('main.main_pack'), value: 'main' }
-            ]
-          }
-        ].concat(this.episodeOptionGroups)
+        const episodeList = this.getBaseEpisodeOptionGroups('main.all_assets')
+        return [{ name: '', episodeList }].concat(this.episodeOptionGroups)
       } else if (['edits'].includes(section)) {
         return [
           {
@@ -355,15 +347,8 @@ export default {
           }
         ].concat(this.episodeOptionGroups)
       } else if (['breakdown'].includes(section)) {
-        return [
-          {
-            name: '',
-            episodeList: [
-              { label: this.$t('shots.episodes'), value: 'all' },
-              { label: this.$t('main.main_pack'), value: 'main' }
-            ]
-          }
-        ].concat(this.episodeOptionGroups)
+        const episodeList = this.getBaseEpisodeOptionGroups('shots.episodes')
+        return [{ name: '', episodeList }].concat(this.episodeOptionGroups)
       } else {
         return this.episodeOptionGroups
       }
@@ -381,10 +366,12 @@ export default {
     },
 
     isEpisodeContext() {
+      const isPlugin = this.$route.params.plugin_id !== undefined
       return (
         this.isTVShow &&
         this.hasEpisodeId &&
-        !['episodes', 'episode-stats'].includes(this.currentSectionOption) &&
+        (!['episodes', 'episode-stats'].includes(this.currentSectionOption) ||
+          isPlugin) &&
         // Do not display combobox if there is no episode
         this.episodes.length > 0
       )
@@ -482,10 +469,12 @@ export default {
 
       // Show these sections to studio members only.
       if (!this.isCurrentUserClient) {
-        options = options.concat([
-          { label: 'separator', value: 'separator' },
-          { label: this.$t('schedule.title'), value: 'schedule' }
-        ])
+        if (!this.isCurrentUserVendor) {
+          options = options.concat([
+            { label: 'separator', value: 'separator' },
+            { label: this.$t('schedule.title'), value: 'schedule' }
+          ])
+        }
         if (isNotOnlyAssets) {
           options.push({ label: this.$t('quota.title'), value: 'quota' })
         }
@@ -493,6 +482,16 @@ export default {
           options.push({ label: this.$t('budget.title'), value: 'budget' })
         }
         options.push({ label: this.$t('people.team'), value: 'team' })
+
+        this.projectPlugins.forEach(plugin => {
+          options.push({
+            label: plugin.name,
+            value: plugin.plugin_id,
+            icon: plugin.icon,
+            plugin_id: plugin.plugin_id,
+            type: 'plugin'
+          })
+        })
 
         if (this.isCurrentUserManager) {
           options = options.concat([
@@ -545,18 +544,25 @@ export default {
     ...mapActions([
       'clearEpisodes',
       'clearSelectedTasks',
+      'decrementNotificationCounter',
       'loadEpisodes',
       'incrementNotificationCounter',
+      'markAllNotificationsAsReadLocal',
+      'resetNotificationCounter',
       'saveLastProductionRoute',
       'setProduction',
       'setCurrentEpisode',
       'setSupportChat',
       'toggleDarkTheme',
+      'toggleNotificationReadStatusLocal',
       'toggleSidebar',
       'toggleUserMenu'
     ]),
 
     getCurrentSectionFromRoute() {
+      if (this.$route.name.includes('production-plugin')) {
+        return this.$route.params.plugin_id
+      }
       if (this.$route.name === 'person') {
         return 'person'
       }
@@ -573,6 +579,14 @@ export default {
       if (name === 'asset-types') name = 'assetTypes'
       if (name === 'news-feed') name = 'newsFeed'
       return name
+    },
+
+    getBaseEpisodeOptionGroups(allLabel) {
+      const episodeList = [{ label: this.$t(allLabel), value: 'all' }]
+      if (this.currentProduction.production_style !== 'video-game') {
+        episodeList.push({ label: this.$t('main.main_pack'), value: 'main' })
+      }
+      return episodeList
     },
 
     updateContext(productionId) {
@@ -701,11 +715,13 @@ export default {
 
     updateCombosFromRoute() {
       const productionId = this.$route.params.production_id
+      const pluginId = this.$route.params.plugin_id
       const section = this.getCurrentSectionFromRoute()
       let episodeId = this.$route.params.episode_id
       this.silent = true
       this.currentProductionId = productionId
       this.currentProjectSection = section
+      this.currentPluginId = pluginId
       const isAssetSection = this.assetSections.includes(section)
       const isEditSection = this.editSections.includes(section)
       const isBreakdownSection = this.breakdownSections.includes(section)
@@ -713,20 +729,21 @@ export default {
         !isAssetSection &&
         !isEditSection &&
         !isBreakdownSection &&
-        ['all', 'main'].includes(episodeId)
+        ['all', 'main'].includes(episodeId) &&
+        this.episodes.length > 0
       ) {
         episodeId = this.episodes[0].id
         this.currentEpisodeId = episodeId
-        this.pushContextRoute(section)
+        this.pushContextRoute(section, pluginId)
       } else {
         this.currentEpisodeId = episodeId
       }
     },
 
-    pushContextRoute(section) {
+    pushContextRoute(section, pluginId = null) {
       const isAssetSection = this.assetSections.includes(section)
       const production = this.productionMap.get(this.currentProductionId)
-      const isTVShow = production.production_type === 'tvshow'
+      const isTVShow = production?.production_type === 'tvshow'
       let episodeId = this.currentEpisodeId
       if (!episodeId && isTVShow) {
         if (isAssetSection) {
@@ -734,13 +751,14 @@ export default {
         } else if (this.episodes.length > 0) {
           episodeId = this.episodes[0].id
         } else {
-          episodeId = production.first_episode_id
+          episodeId = production?.first_episode_id
         }
       }
       let route = {
         name: section,
         params: {
-          production_id: this.currentProductionId
+          production_id: this.currentProductionId,
+          plugin_id: pluginId
         }
       }
       route = this.episodifyRoute(route, section, episodeId, isTVShow)
@@ -815,6 +833,43 @@ export default {
           this.$route.name !== 'notifications'
         ) {
           this.incrementNotificationCounter()
+        }
+      },
+
+      'notification:all-read'(eventData) {
+        if (this.user.id === eventData.person_id) {
+          this.resetNotificationCounter()
+          this.markAllNotificationsAsReadLocal()
+        }
+      },
+
+      'notification:read'(eventData) {
+        if (this.user.id === eventData.person_id) {
+          if (this.$route.name === 'notifications') {
+            const notification = this.notifications.find(
+              notification => notification.id === eventData.notification_id
+            )
+            if (notification && !notification.read) {
+              this.toggleNotificationReadStatusLocal(notification)
+            }
+          } else {
+            this.decrementNotificationCounter()
+          }
+        }
+      },
+
+      'notification:unread'(eventData) {
+        if (this.user.id === eventData.person_id) {
+          if (this.$route.name === 'notifications') {
+            const notification = this.notifications.find(
+              notification => notification.id === eventData.notification_id
+            )
+            if (notification && notification.read) {
+              this.toggleNotificationReadStatusLocal(notification)
+            }
+          } else {
+            this.incrementNotificationCounter()
+          }
         }
       }
     }

@@ -28,7 +28,7 @@
         </thead>
         <tbody class="datatable-body">
           <tr class="datatable-type-header">
-            <th scope="rowgroup" colspan="6">
+            <th scope="rowgroup" colspan="8">
               <span class="datatable-row-header">
                 {{ $t('productions.status.open') }}
               </span>
@@ -68,7 +68,6 @@
                 {{ entry.resolution }}
               </td>
               <row-actions-cell
-                :entry-id="entry.id"
                 @edit-clicked="$emit('edit-clicked', entry)"
                 :hide-delete="true"
               />
@@ -80,12 +79,13 @@
               <td :colspan="7" class="datatable-row-stats">
                 <production-stats :stats="productionStatsMap[entry.id] || {}" />
               </td>
+              <td class="actions"></td>
             </tr>
           </template>
         </tbody>
         <tbody v-if="closedProductions.length > 0">
           <tr class="datatable-type-header">
-            <th scope="rowgroup" colspan="6">
+            <th scope="rowgroup" colspan="8">
               <span class="datatable-row-header">
                 {{ $t('productions.status.closed') }}
               </span>
@@ -129,7 +129,6 @@
               {{ entry.resolution }}
             </td>
             <row-actions-cell
-              :entry-id="entry.id"
               @edit-clicked="$emit('edit-clicked', entry)"
               @delete-clicked="$emit('delete-clicked', entry)"
             />

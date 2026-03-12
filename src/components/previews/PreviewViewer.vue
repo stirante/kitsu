@@ -87,6 +87,12 @@
       v-show="isSound"
     />
 
+    <pdf-viewer
+      :preview="preview"
+      :default-height="defaultHeight"
+      v-if="isPdf"
+    />
+
     <div class="center" :style="{ height: defaultHeight + 'px' }" v-if="isFile">
       <a
         class="button mt2"
@@ -110,6 +116,7 @@ import { formatFrame, formatTime } from '@/lib/video'
 import { domMixin } from '@/components/mixins/dom'
 
 import ObjectViewer from '@/components/previews/ObjectViewer.vue'
+import PdfViewer from '@/components/previews/PdfViewer.vue'
 import PictureViewer from '@/components/previews/PictureViewer.vue'
 import SoundViewer from '@/components/previews/SoundViewer.vue'
 import Spinner from '@/components/widgets/Spinner.vue'
@@ -123,6 +130,7 @@ export default {
   components: {
     DownloadIcon,
     ObjectViewer,
+    PdfViewer,
     PictureViewer,
     SoundViewer,
     Spinner,
@@ -297,8 +305,9 @@ export default {
         !this.isPicture &&
         !this.isMovie &&
         !this.is3DModel &&
-        !this.isSound
-      ) // && !this.isPdf
+        !this.isSound &&
+        !this.isPdf
+      )
     },
 
     originalPath() {
@@ -491,6 +500,18 @@ export default {
       }
       if (this.videoViewer) {
         this.videoViewer.resumePanZoom()
+      }
+    },
+
+    setSpeed(rate) {
+      if (this.videoViewer) {
+        this.videoViewer.setSpeed(rate)
+      }
+    },
+
+    setVolume(volume) {
+      if (this.videoViewer) {
+        this.videoViewer.setVolume(volume)
       }
     }
   },

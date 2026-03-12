@@ -36,15 +36,17 @@
         @save="saveSearchQuery"
         placeholder="ex: John Doe"
       />
-      <combobox-department
-        class="flexrow-item"
-        :label="$t('main.department')"
-        v-model="selectedDepartment"
-      />
       <combobox-studio
         class="flexrow-item"
+        all-studios-label
         :label="$t('main.studio')"
         v-model="selectedStudio"
+      />
+      <combobox-department
+        class="flexrow-item"
+        all-departments-label
+        :label="$t('main.department')"
+        v-model="selectedDepartment"
       />
       <combobox-styled
         class="flexrow-item"
@@ -77,7 +79,7 @@
     />
 
     <import-render-modal
-      :active="modals.isImportRenderDisplayed"
+      active
       :is-loading="isImportPeopleLoading"
       :is-error="isImportPeopleLoadingError"
       :parsed-csv="parsedCSV"
@@ -93,7 +95,7 @@
 
     <import-modal
       ref="import-modal"
-      :active="modals.importModal"
+      active
       :is-loading="isImportPeopleLoading"
       :is-error="isImportPeopleLoadingError"
       :form-data="personCsvFormData"
@@ -101,10 +103,11 @@
       :optional-columns="optionalCsvColumns"
       @cancel="hideImportModal"
       @confirm="renderImport"
+      v-if="modals.importModal"
     />
 
     <edit-avatar-modal
-      :active="modals.avatar"
+      active
       :error-text="$t('people.edit_avatar_error')"
       :is-deleting="loading.deletingAvatar"
       :is-error="errors.avatar"
@@ -113,6 +116,7 @@
       @close="modals.avatar = false"
       @delete="deleteAvatar"
       @update="updateAvatar"
+      v-if="modals.avatar"
     />
 
     <edit-person-modal
@@ -132,14 +136,15 @@
     />
 
     <change-password-modal
-      :active="modals.changePassword"
+      active
       :person="personToChangePassword"
       @cancel="modals.changePassword = false"
       @confirm="modals.changePassword = false"
+      v-if="modals.changePassword"
     />
 
     <hard-delete-modal
-      :active="modals.del"
+      active
       :error-text="$t('people.delete_error')"
       :is-loading="loading.del"
       :is-error="errors.del"
@@ -147,6 +152,7 @@
       :text="deleteText"
       @cancel="modals.del = false"
       @confirm="confirmDeletePeople"
+      v-if="modals.del"
     />
   </div>
 </template>
@@ -267,14 +273,14 @@ export default {
     }
   },
 
-  mounted() {
+  async mounted() {
+    this.activeTab = this.$route.query.tab || 'active'
     this.role = this.$route.query.role || 'all'
     this.selectedDepartment = this.$route.query.department || ''
     this.selectedStudio = this.$route.query.studio || ''
     this.setSearchFromUrl()
-    this.loadPeople(() => {
-      this.onSearchChange()
-    })
+    await this.loadPeople()
+    this.onSearchChange()
   },
 
   computed: {
@@ -285,7 +291,6 @@ export default {
       'isPeopleLoadingError',
       'isImportPeopleLoading',
       'isImportPeopleLoadingError',
-      'people',
       'peopleSearchQueries',
       'personCsvFormData',
       'studioMap'
@@ -370,34 +375,34 @@ export default {
       })
     },
 
-    uploadImportFile(data, toUpdate) {
+    async uploadImportFile(data, toUpdate) {
       const formData = new FormData()
       const filename = 'import.csv'
       const csvContent = csv.turnEntriesToCsvString(data)
       const file = new File([csvContent], filename, { type: 'text/csv' })
 
       formData.append('file', file)
-      this.loading.importing = true
-      this.errors.importing = false
       this.$store.commit('PERSON_CSV_FILE_SELECTED', formData)
 
-      this.uploadPersonFile(toUpdate)
-        .then(() => {
-          this.$store.dispatch('loadPeople')
-          this.hideImportRenderModal()
-        })
-        .catch(err => {
-          console.error(err)
-          this.loading.importing = false
-          this.errors.importing = true
-        })
+      this.loading.importing = true
+      this.errors.importing = false
+      try {
+        await this.uploadPersonFile(toUpdate)
+        this.hideImportRenderModal()
+        await this.loadPeople()
+      } catch (err) {
+        console.error(err)
+        this.errors.importing = true
+      } finally {
+        this.loading.importing = false
+      }
     },
 
     resetImport() {
       this.errors.importing = false
       this.hideImportRenderModal()
       this.$store.commit('PERSON_CSV_FILE_SELECTED', null)
-      this.$refs['import-modal'].reset()
+      this.$refs['import-modal']?.reset()
       this.showImportModal()
     },
 
@@ -406,10 +411,12 @@ export default {
       try {
         await this.clearPersonAvatar(this.personToEdit)
         this.modals.avatar = false
+        this.onSearchChange()
       } catch (err) {
         this.errors.avatar = true
+      } finally {
+        this.loading.deletingAvatar = false
       }
-      this.loading.deletingAvatar = false
     },
 
     async updateAvatar(formData) {
@@ -417,10 +424,12 @@ export default {
       try {
         await this.uploadPersonAvatar({ person: this.personToEdit, formData })
         this.modals.avatar = false
+        this.onSearchChange()
       } catch (err) {
         this.errors.avatar = true
+      } finally {
+        this.loading.updatingAvatar = false
       }
-      this.loading.updatingAvatar = false
     },
 
     confirmEditPeople(form) {
@@ -434,6 +443,7 @@ export default {
         .then(() => {
           this.loading.edit = false
           this.modals.edit = false
+          this.onSearchChange()
         })
         .catch(err => {
           const isUserLimitReached =
@@ -455,6 +465,7 @@ export default {
         .then(() => {
           this.loading.createAndInvite = false
           this.modals.edit = false
+          this.onSearchChange()
         })
         .catch(err => {
           console.error(err)
@@ -467,7 +478,6 @@ export default {
           }
           this.loading.createAndInvite = false
         })
-      this.onSearchChange()
     },
 
     confirmInvite(form) {
@@ -478,6 +488,7 @@ export default {
         .then(() => {
           this.loading.invite = false
           this.success.invite = true
+          this.onSearchChange()
         })
         .catch(err => {
           console.error(err)
@@ -485,7 +496,6 @@ export default {
           this.success.invite = false
           this.errors.invite = true
         })
-      this.onSearchChange()
     },
 
     confirmDeletePeople() {
@@ -495,6 +505,7 @@ export default {
         .then(() => {
           this.loading.del = false
           this.modals.del = false
+          this.onSearchChange()
         })
         .catch(err => {
           console.error(err)
@@ -504,16 +515,16 @@ export default {
     },
 
     onSearchChange() {
-      if (!this.searchField) return
-      const searchQuery = this.searchField.getValue()
-      if (searchQuery.length !== 1) {
-        this.setPeopleSearch(searchQuery)
+      if (this.searchField) {
+        const searchQuery = this.searchField?.getValue()
+        if (searchQuery?.length !== 1) {
+          this.setPeopleSearch(searchQuery)
+        }
+        this.setSearchInUrl()
       }
-      this.setSearchInUrl()
-      this.tabs[0].label =
-        this.$t('main.active') + ' (' + this.activePeople.length + ')'
-      this.tabs[1].label =
-        this.$t('people.unactive') + ' (' + this.unactivePeople.length + ')'
+      // refresh tabs
+      this.tabs[0].label = `${this.$t('main.active')} (${this.activePeople.length})`
+      this.tabs[1].label = `${this.$t('people.unactive')} (${this.unactivePeople.length})`
     },
 
     onAvatarClicked(person) {
@@ -616,7 +627,8 @@ export default {
       this.activeTab = this.$route.query.tab || 'active'
     },
 
-    '$route.query.search'() {
+    '$route.query.search'(search) {
+      this.searchField?.setValue(search)
       this.onSearchChange()
     }
   },

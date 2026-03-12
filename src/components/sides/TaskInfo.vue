@@ -62,18 +62,33 @@
       </div>
 
       <div v-else-if="task">
-        <div class="pa1 pb0">
+        <div class="flexrow extra-buttons pa05">
+          <div class="filler"></div>
+          <div
+            class="pointer"
+            :title="$t('main.csv.export_file')"
+            @click="onExportClick"
+            v-if="!withActions && !isCurrentUserClient"
+          >
+            <kitsu-icon name="export" :title="$t('main.csv.export_file')" />
+          </div>
+        </div>
+
+        <div class="pa1 pb0 pt0">
           <div class="flexrow header-title" v-if="!isConceptTask">
             <task-type-name
-              class="flexrow-item task-type"
+              class="flexrow-item task-type mr1"
               :task-type="currentTaskType"
               :production-id="task.project_id"
               v-if="currentTaskType"
             />
             <div class="title flexrow-item filler">
-              <router-link :to="taskEntityPath">
-                {{ task ? title : 'Loading...' }}
+              <router-link :to="taskEntityPath" v-if="!isCurrentUserClient">
+                {{ title }}
               </router-link>
+              <template v-else>
+                {{ title }}
+              </template>
             </div>
           </div>
         </div>
@@ -161,6 +176,7 @@
                 <add-comment
                   ref="add-comment"
                   :team="currentTeam"
+                  :task-types="currentTaskTypes"
                   :task="task"
                   :task-status="taskStatuses"
                   :is-loading="loading.addComment"
@@ -212,11 +228,13 @@
                         user.id === comment.person?.id ||
                         isAssigned ||
                         isDepartmentSupervisor ||
-                        isCurrentUserManager
+                        isCurrentUserManager ||
+                        isClientFromSameStudio(comment.person)
                       "
                       :revision="currentRevision"
                       :task="task"
                       :team="currentTeam"
+                      :task-types="currentTaskTypes"
                       @ack-comment="onAckComment"
                       @duplicate-comment="onDuplicateComment"
                       @pin-comment="onPinComment"
@@ -273,6 +291,7 @@
           :is-error="errors.editComment"
           :revision="currentRevision"
           :team="currentTeam"
+          :task-types="currentTaskTypes"
           @confirm="confirmEditTaskComment"
           @cancel="onCancelEditComment"
         />
@@ -305,7 +324,9 @@
             :key="entity.id"
             v-for="entity in Array.from(selectedEntities.values())"
           >
-            {{ entity.full_name }}
+            <span :class="{ canceled: entity.canceled }">{{
+              entity.full_name
+            }}</span>
           </div>
         </div>
       </div>
@@ -352,6 +373,7 @@ import Comment from '@/components/widgets/Comment.vue'
 import ComboboxStyled from '@/components/widgets/ComboboxStyled.vue'
 import DeleteModal from '@/components/modals/DeleteModal.vue'
 import EditCommentModal from '@/components/modals/EditCommentModal.vue'
+import KitsuIcon from '@/components/widgets/KitsuIcon.vue'
 import PeopleAvatar from '@/components/widgets/PeopleAvatar.vue'
 import PreviewPlayer from '@/components/previews/PreviewPlayer.vue'
 import Spinner from '@/components/widgets/Spinner.vue'
@@ -373,6 +395,7 @@ export default {
     CornerRightUpIcon,
     DeleteModal,
     EditCommentModal,
+    KitsuIcon,
     PeopleAvatar,
     PreviewPlayer,
     Spinner,
@@ -541,6 +564,7 @@ export default {
       'shotMap',
       'nbSelectedValidations',
       'taskEntityPreviews',
+      'taskMap',
       'taskTypeMap',
       'user'
     ]),
@@ -567,10 +591,53 @@ export default {
     currentTeam() {
       if (!this.task) return []
       const production = this.productionMap.get(this.task.project_id)
-      if (!production) return []
+      if (!production?.team) return []
       return sortPeople(
-        production.team.map(personId => this.personMap.get(personId))
+        production.team
+          .map(personId => this.personMap.get(personId))
+          .filter(Boolean)
       )
+    },
+
+    // get current task types for this project filtered by current task entity type (Shot or Asset)
+    currentTaskTypes() {
+      if (!this.task || !this.currentProduction) return []
+
+      // task types for this project
+      const task_types = this.currentProduction.task_types
+
+      // get the current task entity type eg. 'Shot' or 'Asset'
+      const current_task_type = this.taskTypeMap.get(this.task.task_type_id)
+      const task_type_entity = current_task_type.for_entity
+      const task_type_entity_slug = task_type_entity.toLowerCase() + 's'
+
+      // lets get a map of all tasks that are the same entity
+      // where the key is the task type id
+      const entity_tasks = {}
+      for (const keyValue of this.taskMap) {
+        const task = keyValue[1]
+        if (task.entity_id === this.task.entity_id)
+          entity_tasks[task.task_type_id] = task
+      }
+
+      const filtered = task_types
+        // get all task type objects
+        .map(taskTypeId => this.taskTypeMap.get(taskTypeId))
+
+        // filter down to just those that match this task entity type Shot, Asset etc.
+        .filter(taskType => taskType?.for_entity === task_type_entity)
+
+        // filter to tasks that exist
+        .filter(taskType => entity_tasks[taskType.id])
+
+        // add a url that points to the task
+        .map(taskType => {
+          const task = entity_tasks[taskType.id]
+          if (task)
+            taskType.url = `/productions/${task.project_id}/episodes/${task.episode_id || 'all'}/${task_type_entity_slug}/tasks/${task.id}`
+          return taskType
+        })
+      return filtered
     },
 
     title() {
@@ -578,7 +645,7 @@ export default {
         const entityName = this.task.full_entity_name || this.task.entity_name
         return `${entityName}`
       } else {
-        return 'Loading...'
+        return this.$t('main.loading')
       }
     },
 
@@ -737,8 +804,7 @@ export default {
     },
 
     moviePath() {
-      let previewId = null
-      previewId = this.currentPreview.id
+      const previewId = this.currentPreview.id
       return `/api/movies/originals/preview-files/${previewId}.mp4`
     },
 
@@ -1114,6 +1180,14 @@ export default {
       this.modals.deleteComment = false
     },
 
+    isClientFromSameStudio(person) {
+      return (
+        this.isCurrentUserClient &&
+        this.user.studio_id === person.studio_id &&
+        person.role === 'client'
+      )
+    },
+
     async saveComment(comment) {
       try {
         await this.editTaskComment({
@@ -1166,7 +1240,7 @@ export default {
       this.$refs['preview-player'].displayFirst()
       this.deleteTaskPreview({
         taskId: this.task.id,
-        commentId: comment.id,
+        commentId: comment?.id,
         previewId
       })
         .then(() => {
@@ -1752,5 +1826,15 @@ export default {
 .no-selection-separator {
   background-color: var(--border-alt);
   margin: 1em;
+}
+
+.task-type {
+  margin-right: 1em;
+}
+
+.extra-buttons {
+  img {
+    width: 16px;
+  }
 }
 </style>

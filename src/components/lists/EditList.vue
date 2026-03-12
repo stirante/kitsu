@@ -53,11 +53,11 @@
               </div>
             </th>
 
-            <th scope="col" class="resolution" v-if="isShowInfos">
+            <th scope="col" class="resolution" v-if="displaySettings.showInfos">
               {{ $t('shots.fields.resolution') }}
             </th>
 
-            <template v-if="isShowInfos">
+            <template v-if="displaySettings.showInfos">
               <metadata-header
                 :ref="`editor-${j}`"
                 :key="descriptor.id"
@@ -101,12 +101,16 @@
             <th
               scope="col"
               class="description selectable"
-              v-if="!isCurrentUserClient && isShowInfos && isEditDescription"
+              v-if="
+                !isCurrentUserClient &&
+                displaySettings.showInfos &&
+                isEditDescription
+              "
             >
               {{ $t('edits.fields.description') }}
             </th>
 
-            <template v-if="isShowInfos">
+            <template v-if="displaySettings.showInfos">
               <metadata-header
                 :key="descriptor.id"
                 :descriptor="descriptor"
@@ -122,7 +126,7 @@
               ref="th-spent"
               v-if="
                 !isCurrentUserClient &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isEditTime &&
                 metadataDisplayHeaders.timeSpent
               "
@@ -136,7 +140,7 @@
               ref="th-spent"
               v-if="
                 !isCurrentUserClient &&
-                isShowInfos &&
+                displaySettings.showInfos &&
                 isEditEstimation &&
                 metadataDisplayHeaders.estimation
               "
@@ -186,14 +190,17 @@
                 namespace="edits"
                 v-model="metadataDisplayHeaders"
                 v-show="columnSelectorDisplayed"
-                v-if="isShowInfos"
+                v-if="displaySettings.showInfos"
               />
 
               <button-simple
                 class="is-small is-pulled-right mr05"
                 icon="down"
                 @click="toggleColumnSelector"
-                v-if="editMetadataDescriptors.length > 0 && isShowInfos"
+                v-if="
+                  editMetadataDescriptors.length > 0 &&
+                  displaySettings.showInfos
+                "
               />
             </th>
           </tr>
@@ -241,22 +248,26 @@
                   />
                   <entity-thumbnail
                     :entity="edit"
-                    :width="isBigThumbnails ? 150 : 50"
-                    :height="isBigThumbnails ? 100 : 33"
-                    :empty-width="isBigThumbnails ? 150 : 50"
-                    :empty-height="isBigThumbnails ? 100 : 34"
+                    :width="displaySettings.bigThumbnails ? 150 : 50"
+                    :height="displaySettings.bigThumbnails ? 100 : 33"
+                    :empty-width="displaySettings.bigThumbnails ? 150 : 50"
+                    :empty-height="displaySettings.bigThumbnails ? 100 : 34"
                   />
                   <router-link
                     tabindex="-1"
                     :title="edit.full_name"
                     :to="editPath(edit.id)"
+                    v-if="!isCurrentUserClient"
                   >
                     {{ edit.name }}
                   </router-link>
+                  <template v-else>
+                    {{ edit.name }}
+                  </template>
                 </div>
               </th>
 
-              <td class="resolution" v-if="isShowInfos">
+              <td class="resolution" v-if="displaySettings.showInfos">
                 <input
                   :class="{
                     'input-editor': true,
@@ -317,11 +328,11 @@
                     'hidden-validation-cell': hiddenColumns[columnId],
                     'datatable-row-header': true
                   }"
-                  :contact-sheet="contactSheetMode"
+                  :contact-sheet="displaySettings.contactSheetMode"
                   :column="taskTypeMap.get(columnId)"
                   :column-y="j"
                   :entity="edit"
-                  :is-assignees="isShowAssignations"
+                  :is-assignees="displaySettings.showAssignations"
                   :is-static="true"
                   :left="
                     offsets['validation-' + j]
@@ -346,11 +357,15 @@
                 @description-changed="
                   value => onDescriptionChanged(edit, value)
                 "
-                v-if="!isCurrentUserClient && isShowInfos && isEditDescription"
+                v-if="
+                  !isCurrentUserClient &&
+                  displaySettings.showInfos &&
+                  isEditDescription
+                "
               />
 
               <!-- other Metadata cells -->
-              <template v-if="isShowInfos">
+              <template v-if="displaySettings.showInfos">
                 <td
                   class="metadata-descriptor"
                   :title="edit.data ? edit.data[descriptor.field_name] : ''"
@@ -372,7 +387,7 @@
                 class="time-spent selectable"
                 v-if="
                   !isCurrentUserClient &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   isEditTime &&
                   metadataDisplayHeaders.timeSpent
                 "
@@ -384,7 +399,7 @@
                 class="estimation selectable"
                 v-if="
                   !isCurrentUserClient &&
-                  isShowInfos &&
+                  displaySettings.showInfos &&
                   isEditEstimation &&
                   metadataDisplayHeaders.estimation
                 "
@@ -401,7 +416,7 @@
                     'validation-cell': !hiddenColumns[columnId],
                     'hidden-validation-cell': hiddenColumns[columnId]
                   }"
-                  :contact-sheet="contactSheetMode"
+                  :contact-sheet="displaySettings.contactSheetMode"
                   :key="`${columnId}-${edit.id}`"
                   :column="taskTypeMap.get(columnId)"
                   :entity="edit"
@@ -416,7 +431,7 @@
                   "
                   :row-x="i"
                   :column-y="j"
-                  :is-assignees="isShowAssignations"
+                  :is-assignees="displaySettings.showAssignations"
                   @select="onTaskSelected"
                   @unselect="onTaskUnselected"
                   v-for="(columnId, j) in nonStickedDisplayedValidationColumns"
@@ -465,19 +480,32 @@
     </div>
 
     <p class="has-text-centered nb-edits" v-if="!isEmptyList && !isLoading">
-      {{ displayedEditsLength }} {{ $tc('edits.number', displayedEditsLength) }}
+      {{ displayedEditsLength }}
+      {{ $tc('edits.number', displayedEditsLength) }}
       <span v-if="displayedEditsTimeSpent > 0 || displayedEditsEstimation > 0">
         ({{ formatDuration(displayedEditsTimeSpent) }}
         {{
           isDurationInHours
-            ? $tc('main.hours_spent', displayedEditsTimeSpent)
-            : $tc('main.days_spent', displayedEditsTimeSpent)
+            ? $tc(
+                'main.hours_spent',
+                formatDuration(displayedEditsTimeSpent, false)
+              )
+            : $tc(
+                'main.days_spent',
+                formatDuration(displayedEditsTimeSpent, false)
+              )
         }},
         {{ formatDuration(displayedEditsEstimation) }}
         {{
           isDurationInHours
-            ? $tc('main.hours_estimated', displayedEditsEstimation)
-            : $tc('main.man_days', displayedEditsEstimation)
+            ? $tc(
+                'main.hours_estimated',
+                formatDuration(displayedEditsEstimation, false)
+              )
+            : $tc(
+                'main.man_days',
+                formatDuration(displayedEditsEstimation, false)
+              )
         }})
       </span>
     </p>
@@ -521,13 +549,13 @@ export default {
   ],
 
   props: {
-    contactSheetMode: {
-      type: Boolean,
-      default: false
-    },
     displayedEdits: {
       type: Array,
       default: () => []
+    },
+    displaySettings: {
+      type: Object,
+      default: () => {}
     },
     isError: {
       type: Boolean,
@@ -602,7 +630,6 @@ export default {
       'displayedEditsCount',
       'displayedEditsLength',
       'displayedEditsTimeSpent',
-      'isBigThumbnails',
       'isCurrentUserAdmin',
       'isCurrentUserManager',
       'isCurrentUserSupervisor',
@@ -611,8 +638,6 @@ export default {
       'isEditDescription',
       'isEditEstimation',
       'isEditTime',
-      'isShowAssignations',
-      'isShowInfos',
       'isTVShow',
       'nbSelectedTasks',
       'selectedEdits',
@@ -651,36 +676,11 @@ export default {
       return !this.isLoading && !this.isError && this.displayedEditsCount > 0
     },
 
-    visibleColumns() {
-      let count = 2
-      count +=
-        !this.isCurrentUserClient && this.isShowInfos && this.isEditDescription
-          ? 1
-          : 0
-      count += this.visibleMetadataDescriptors.length
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isEditTime &&
-        this.metadataDisplayHeaders.timeSpent
-          ? 1
-          : 0
-      count +=
-        !this.isCurrentUserClient &&
-        this.isShowInfos &&
-        this.isEditEstimation &&
-        this.metadataDisplayHeaders.estimation
-          ? 1
-          : 0
-      count += this.displayedValidationColumns.length
-      return count
-    },
-
     displayedValidationColumns() {
       return this.validationColumns.filter(columnId => {
         return (
           this.editFilledColumns[columnId] &&
-          (!this.hiddenColumns[columnId] || this.isShowInfos)
+          (!this.hiddenColumns[columnId] || this.displaySettings.showInfos)
         )
       })
     },
@@ -690,7 +690,7 @@ export default {
     },
 
     localStorageStickKey() {
-      return `stick-edits-${this.currentProduction.id}`
+      return `stick-edits-${this.currentProduction?.id}`
     }
   },
 
@@ -752,7 +752,7 @@ export default {
       const route = {
         name: section,
         params: {
-          production_id: this.currentProduction.id
+          production_id: this.currentProduction?.id
         }
       }
 
@@ -805,7 +805,7 @@ export default {
         let offset = this.$refs['th-edit'].clientWidth
         this.offsets = {}
 
-        if (this.isShowInfos) {
+        if (this.displaySettings.showInfos) {
           for (
             let metadataCol = 0;
             metadataCol < this.stickedVisibleMetadataDescriptors.length;
@@ -841,10 +841,6 @@ export default {
     },
 
     isLoading() {
-      this.updateOffsets()
-    },
-
-    isBigThumbnails() {
       this.updateOffsets()
     }
   },
@@ -939,10 +935,6 @@ span.thumbnail-empty {
 .datatable-row th.name {
   font-size: 1.1em;
   padding: 6px;
-}
-
-.datatable-row-header {
-  cursor: pointer;
 }
 
 .dark {
@@ -1054,7 +1046,7 @@ td .select {
 }
 
 .metadata-value {
-  padding: 0.8rem;
+  padding: 0.5rem 0.75rem;
 }
 
 .resolution {

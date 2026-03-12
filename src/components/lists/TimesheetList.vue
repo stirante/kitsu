@@ -6,6 +6,7 @@
           :can-delete="false"
           :min-date="disabledDates.to"
           :max-date="disabledDates.from"
+          utc
           :with-margin="false"
           v-model="selectedDate"
         />
@@ -56,7 +57,7 @@
             >
               {{ $t('tasks.fields.entity') }}
             </th>
-            <th scope="col" class="time-spent">
+            <th scope="col" class="time-spent datatable-row-header">
               {{ $t('timesheets.time_spents') }}
             </th>
           </tr>
@@ -201,7 +202,7 @@
       "
       :is-error="isDayOffError"
       :error-text="dayOffTextError"
-      @confirm="$emit('unset-day-off')"
+      @confirm="$emit('unset-day-off', personDayOff)"
       @cancel="closeUnsetDayOffModal"
     />
   </div>
@@ -258,6 +259,10 @@ export default {
     isError: {
       default: false,
       type: Boolean
+    },
+    daysOff: {
+      default: () => [],
+      type: Array
     },
     dayOffError: {
       default: false,
@@ -316,12 +321,23 @@ export default {
     ...mapGetters([
       'isCurrentUserArtist',
       'organisation',
-      'personDayOff',
-      'personIsDayOff',
       'productionMap',
       'taskTypeMap',
       'user'
     ]),
+
+    personDayOff() {
+      const selectedDate = moment(this.selectedDate).format('YYYY-MM-DD')
+      return this.daysOff.find(
+        dayOff =>
+          selectedDate >= dayOff.date &&
+          selectedDate <= (dayOff.end_date || dayOff.date)
+      )
+    },
+
+    personIsDayOff() {
+      return Boolean(this.personDayOff)
+    },
 
     displayedTasks() {
       return this.tasks.slice(0, this.page * (PAGE_SIZE / 2))
@@ -411,8 +427,13 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-.datatable-head th {
+.datatable-row-header {
   z-index: 6; // over the .vue-slider (z-index: 5)
+
+  &.time-spent {
+    position: relative;
+    z-index: 5; // <th> must be under <td> on vertical scroll
+  }
 }
 
 .datatable-body tr:first-child th,
@@ -457,10 +478,6 @@ export default {
 
 .time-spent {
   width: 100%;
-
-  :deep(.vue-slider:hover) {
-    z-index: 6; // hover the ".datatable-head th" (z-index: 6)
-  }
 }
 
 td.name {

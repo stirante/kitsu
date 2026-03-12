@@ -2,11 +2,11 @@
   <th
     scope="col"
     :class="{
-      'validation-cell': !hiddenColumns[columnId],
-      'hidden-validation-cell': hiddenColumns[columnId],
+      'validation-cell': !isHiddenColumn,
+      'hidden-validation-cell': isHiddenColumn,
       'datatable-row-header': isStick
     }"
-    :style="{ left: left }"
+    :style="{ left }"
   >
     <div class="flexrow validation-content" :style="validationStyle">
       <department-name
@@ -18,28 +18,24 @@
       />
       <router-link
         class="flexrow-item datatable-dropdown ellipsis task-type-name"
-        :title="
-          !hiddenColumns[columnId] ? taskTypeMap.get(columnId).name : null
-        "
+        :title="!isHiddenColumn ? currentTaskType.name : null"
         :to="taskTypePath(columnId)"
         v-if="!isCurrentUserClient"
       >
-        {{ !hiddenColumns[columnId] ? taskTypeMap.get(columnId).name : '' }}
+        {{ !isHiddenColumn ? currentTaskType.name : '' }}
       </router-link>
       <span
         class="flexrow-item datatable-dropdown ellipsis task-type-name"
-        :title="
-          !hiddenColumns[columnId] ? taskTypeMap.get(columnId).name : null
-        "
+        :title="!isHiddenColumn ? currentTaskType.name : null"
         v-else
       >
-        {{ !hiddenColumns[columnId] ? taskTypeMap.get(columnId).name : '' }}
+        {{ !isHiddenColumn ? currentTaskType.name : '' }}
       </span>
       <span
-        class="metadata-menu-button header-icon"
+        class="metadata-menu-button header-icon pointer"
         @click="$emit('show-header-menu', $event)"
       >
-        <chevron-down-icon :size="12" />
+        <chevron-down-icon :size="14" />
       </span>
     </div>
   </th>
@@ -68,8 +64,7 @@ export default {
       default: false
     },
     left: {
-      type: String,
-      default: '0px'
+      type: String
     },
     type: {
       type: String,
@@ -90,25 +85,30 @@ export default {
     ]),
 
     currentDepartment() {
-      return this.departmentMap.get(
-        this.taskTypeMap.get(this.columnId).department_id
-      )
+      return this.departmentMap.get(this.currentTaskType.department_id)
+    },
+
+    currentTaskType() {
+      return this.taskTypeMap.get(this.columnId) ?? {}
+    },
+
+    isHiddenColumn() {
+      return this.hiddenColumns[this.columnId]
     }
   },
   methods: {
     taskTypePath(taskTypeId) {
-      const taskType = this.taskTypeMap.get(taskTypeId)
-      let route = {}
-      if (taskType.for_entity === 'Episode') {
-        route = {
+      if (this.currentTaskType.for_entity === 'Episode') {
+        const route = {
           name: 'episodes-task-type',
           params: {
             production_id: this.currentProduction.id,
             task_type_id: taskTypeId
           }
         }
+        return route
       } else {
-        route = {
+        const route = {
           name: 'task-type',
           params: {
             production_id: this.currentProduction.id,
@@ -121,9 +121,8 @@ export default {
           route.name = 'episode-task-type'
           route.params.episode_id = this.currentEpisode.id
         }
+        return route
       }
-
-      return route
     }
   }
 }
@@ -145,18 +144,12 @@ th.metadata-descriptor {
   margin-right: 0;
 }
 
-.header-icon {
-  background: var(--background);
-  border-radius: 50%;
-  height: 18px;
-  padding: 1px;
-}
-
 .metadata-menu-button {
   background: var(--background);
   border-radius: 50%;
-  height: 15px;
-  width: 15px;
+  height: 16px;
+  width: 16px;
+  padding: 1px;
   position: absolute;
   right: 5px;
 }

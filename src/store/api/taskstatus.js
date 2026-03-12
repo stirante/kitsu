@@ -7,6 +7,7 @@ const sanitizeTaskStatus = taskStatus => {
     description: taskStatus.description,
     for_concept: Boolean(taskStatus.for_concept === 'true'),
     is_default: Boolean(taskStatus.is_default === 'true'),
+    is_wip: Boolean(taskStatus.is_wip === 'true'),
     is_done: Boolean(taskStatus.is_done === 'true'),
     is_retake: Boolean(taskStatus.is_retake === 'true'),
     is_artist_allowed: Boolean(taskStatus.is_artist_allowed === 'true'),
@@ -19,12 +20,12 @@ const sanitizeTaskStatus = taskStatus => {
 }
 
 export default {
-  getTaskStatuses(callback) {
-    client.get('/api/data/task-status', callback)
+  getTaskStatuses() {
+    return client.pget('/api/data/task-status')
   },
 
-  getTaskStatus(taskStatusId, callback) {
-    client.get(`/api/data/task-status/${taskStatusId}`, callback)
+  getTaskStatus(taskStatusId) {
+    return client.pget(`/api/data/task-status/${taskStatusId}`)
   },
 
   newTaskStatus(taskStatus) {

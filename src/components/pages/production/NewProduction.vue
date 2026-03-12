@@ -234,7 +234,6 @@
               class="flexrow-item"
               :task-status-list="availableTaskStatuses"
               :with-margin="false"
-              big
               add-placeholder
               @update:model-value="
                 id =>
@@ -581,13 +580,14 @@ export default {
         shotsToCreate: [],
         taskStatuses: []
       },
-      assetsOptionalColumns: ['Description', 'Ready for'],
+      assetsOptionalColumns: ['Description', 'Ready for', 'Resolution'],
       shotsOptionalColumns: [
         'Description',
         'Nb Frames',
         'Frame In',
         'Frame Out',
-        'FPS'
+        'FPS',
+        'Resolution'
       ],
       taskTypeForEntity: 'Asset',
       genericColumns: [
@@ -788,7 +788,7 @@ export default {
       )
       return [
         {
-          name: '+ Add Asset Type',
+          name: this.$t('asset_types.add_asset_type_placeholder'),
           id: '-'
         },
         ...assetTypes

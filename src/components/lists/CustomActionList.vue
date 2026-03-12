@@ -28,13 +28,18 @@
             <td scope="row" class="name datatable-row-header">
               {{ customAction.name }}
             </td>
-            <td class="url">{{ customAction.url }}</td>
-            <td class="entity-type">{{ customAction.entity_type }}</td>
+            <td class="url">
+              {{ customAction.url }}
+            </td>
+            <td class="entity-type">
+              {{
+                $t(`custom_actions.entity_types.${customAction.entity_type}`)
+              }}
+            </td>
             <td class="is-ajax">
               {{ formatBoolean(customAction.is_ajax) }}
             </td>
             <row-actions-cell
-              :entry-id="customAction.id"
               @edit-clicked="$emit('edit-clicked', customAction)"
               @delete-clicked="$emit('delete-clicked', customAction)"
             />

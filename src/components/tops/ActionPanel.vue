@@ -15,6 +15,7 @@
               isInDepartment ||
               isCurrentViewTodos) &&
             !isEntitySelection &&
+            !isCurrentViewConcept &&
             isTaskSelection
           "
         >
@@ -214,10 +215,8 @@
           v-if="
             !isEntitySelection &&
             isTaskSelection &&
-            !isCurrentViewEpisode &&
             !isCurrentViewConcept &&
-            customActions &&
-            customActions.length > 0
+            customActions?.length
           "
         ></div>
 
@@ -229,13 +228,10 @@
           :title="$t('menu.run_custom_action')"
           @click="selectBar('custom-actions')"
           v-if="
-            (isCurrentUserManager || isSupervisorInDepartment) &&
             !isEntitySelection &&
             isTaskSelection &&
-            !isCurrentViewEpisode &&
             !isCurrentViewConcept &&
-            customActions &&
-            customActions.length > 0
+            customActions?.length
           "
         >
           <play-circle-icon />
@@ -297,7 +293,12 @@
           class="menu-item"
           :title="$t('main.csv.export_file')"
           @click="$emit('export-task')"
-          v-if="isTaskSelection && !isEntitySelection && nbSelectedTasks === 1"
+          v-if="
+            isTaskSelection &&
+            !isEntitySelection &&
+            nbSelectedTasks === 1 &&
+            !isCurrentUserClient
+          "
         >
           <kitsu-icon name="export" :title="$t('main.csv.export_file')" />
         </div>
@@ -381,6 +382,27 @@
             >
               {{ $tc('tasks.assign', nbSelectedTasks, { nbSelectedTasks }) }}
             </button>
+          </div>
+          <div class="flexrow-item mb05 disclaimer">
+            <router-link
+              :to="{
+                name: 'team',
+                params: {
+                  production_id: currentProduction.id
+                }
+              }"
+              target="_blank"
+            >
+              {{ $t('tasks.assignation_disclaimer') }}
+            </router-link>
+          </div>
+          <div
+            class="flexrow-item mb05 assignation-error"
+            v-if="errors.taskAssignation"
+          >
+            <p class="is-danger has-text-centered">
+              {{ $t('tasks.assignation_error') }}
+            </p>
           </div>
           <div
             class="flexrow-item is-wide flexrow"
@@ -558,24 +580,22 @@
         </div>
 
         <div class="flexrow-item is-wide" v-if="selectedBar === 'delete-tasks'">
-          <div class="flexrow is-wide">
-            <button
-              class="button is-danger confirm-button is-wide"
-              :class="{
-                'is-loading': loading.taskDeletion
-              }"
-              @click="confirmTaskDeletion"
-            >
-              {{
-                $tc('tasks.delete_for_selection', nbSelectedTasks, {
-                  nbSelectedTasks
-                })
-              }}
-            </button>
-          </div>
-          <div class="flexrow-item error" v-if="errors.taskDeletion">
-            {{ $t('tasks.delete_error') }}
-          </div>
+          <delete-entities
+            :error-text="$t('tasks.delete_for_selection_error')"
+            :is-loading="loading.taskDeletion"
+            :is-error="errors.taskDeletion"
+            :require-hard-delete-confirmation="true"
+            :hard-delete-lock-text="
+              $t('tasks.delete_for_selection_hard_lock_text')
+            "
+            :hard-delete-text="$t('tasks.delete_for_selection_hard_text')"
+            :text="
+              $tc('tasks.delete_for_selection', nbSelectedTasks, {
+                nbSelectedTasks
+              })
+            "
+            @confirm="confirmTaskDeletion"
+          />
         </div>
 
         <div class="flexcolumn filler" v-if="selectedBar === 'custom-actions'">
@@ -669,6 +689,11 @@
                 nbSelectedAssets
               })
             "
+            :require-hard-delete-confirmation="allAssetsCanceled"
+            :hard-delete-lock-text="
+              $tc('assets.delete_for_selection_hard_lock_text')
+            "
+            :hard-delete-text="$tc('assets.delete_for_selection_hard_text')"
             @confirm="confirmAssetDeletion"
           />
         </div>
@@ -683,6 +708,11 @@
                 nbSelectedShots
               })
             "
+            :require-hard-delete-confirmation="allShotsCanceled"
+            :hard-delete-lock-text="
+              $t('shots.delete_for_selection_hard_lock_text')
+            "
+            :hard-delete-text="$t('shots.delete_for_selection_hard_text')"
             @confirm="confirmShotDeletion"
           />
         </div>
@@ -697,6 +727,11 @@
                 nbSelectedEdits
               })
             "
+            :require-hard-delete-confirmation="allEditsCanceled"
+            :hard-delete-lock-text="
+              $t('edits.delete_for_selection_hard_lock_text')
+            "
+            :hard-delete-text="$t('edits.delete_for_selection_hard_text')"
             @confirm="confirmEditDeletion"
           />
         </div>
@@ -714,6 +749,7 @@
                 nbSelectedEpisodes
               })
             "
+            :require-hard-delete-confirmation="true"
             @confirm="confirmEpisodeDeletion"
           />
         </div>
@@ -731,6 +767,11 @@
                 nbSelectedConcepts
               })
             "
+            :require-hard-delete-confirmation="true"
+            :hard-delete-lock-text="
+              $t('concepts.delete_for_selection_hard_lock_text')
+            "
+            :hard-delete-text="$t('concepts.delete_for_selection_hard_text')"
             @confirm="confirmConceptDeletion"
           />
         </div>
@@ -807,6 +848,7 @@ import {
 } from 'lucide-vue-next'
 import { mapGetters, mapActions } from 'vuex'
 
+import assetsStore from '@/store/modules/assets.js'
 import { intersection } from '@/lib/array'
 import func from '@/lib/func'
 
@@ -873,7 +915,6 @@ export default {
       person: null,
       priority: '0',
       selectedBar: '',
-      selectedTaskIds: [],
       taskStatusId: '',
       statusComment: '',
       modals: {
@@ -915,6 +956,7 @@ export default {
       },
       errors: {
         assetDeletion: false,
+        taskAssignation: false,
         taskDeletion: false,
         conceptDeletion: false,
         editDeletion: false,
@@ -934,11 +976,11 @@ export default {
 
   computed: {
     ...mapGetters([
-      'allCustomActions',
-      'assetMap',
-      'assetCustomActions',
       'assetsByType',
+      'currentProduction',
+      'getCustomActionsByType',
       'isCurrentUserArtist',
+      'isCurrentUserClient',
       'isCurrentUserManager',
       'isCurrentUserSupervisor',
       'isShowAssignations',
@@ -950,12 +992,15 @@ export default {
       'selectedEdits',
       'selectedShots',
       'selectedTasks',
-      'shotCustomActions',
       'taskMap',
       'taskStatusForCurrentUser',
       'taskTypeMap',
       'user'
     ]),
+
+    assetMap() {
+      return assetsStore.cache.assetMap
+    },
 
     minimized() {
       return this.selectedBar === ''
@@ -1006,11 +1051,7 @@ export default {
     },
 
     defaultCustomAction() {
-      if (this.customActions.length > 0) {
-        return this.customActions[0]
-      } else {
-        return {}
-      }
+      return this.customActions?.[0] ?? {}
     },
 
     isTaskSelection() {
@@ -1023,16 +1064,6 @@ export default {
         this.selectedShots.size > 0 ||
         this.selectedEdits.size > 0
       )
-    },
-
-    isAssigned() {
-      if (!this.isCurrentUserArtist) return
-      if (this.nbSelectedTasks === 0) return
-      const selectedTasks = Array.from(this.selectedTasks.values())
-      const isAssigned = selectedTasks.some(task => {
-        return task.assignees.includes(this.user.id)
-      })
-      return isAssigned
     },
 
     nbSelectedAssets() {
@@ -1049,6 +1080,25 @@ export default {
 
     nbSelectedConcepts() {
       return this.selectedConcepts.size
+    },
+
+    allAssetsCanceled() {
+      return Array.from(this.selectedAssets.values()).every(
+        asset => asset.canceled
+      )
+    },
+
+    allShotsCanceled() {
+      const allShotsCanceled = Array.from(this.selectedShots.values()).every(
+        shot => shot.canceled
+      )
+      return allShotsCanceled
+    },
+
+    allEditsCanceled() {
+      return Array.from(this.selectedEdits.values()).every(
+        edit => edit.canceled
+      )
     },
 
     isHidden() {
@@ -1116,10 +1166,6 @@ export default {
       return this.$route.path.includes('people/')
     },
 
-    isCurrentViewPersonTasks() {
-      return this.$route.path.includes('todos')
-    },
-
     isCurrentViewTaskType() {
       return this.$route.path.includes('task-type')
     },
@@ -1156,6 +1202,10 @@ export default {
 
     selectedPersonId() {
       return this.person ? this.person.id : null
+    },
+
+    selectedTaskIds() {
+      return Array.from(this.selectedTasks.keys())
     },
 
     isInDepartment() {
@@ -1280,10 +1330,12 @@ export default {
             ? this.selectedPersonId
             : this.user.id
         this.loading.assignation = true
+        this.errors.taskAssignation = false
         try {
           await this.assignSelectedTasks({ personId })
           this.$refs['assignation-field']?.clear()
         } catch (err) {
+          this.errors.taskAssignation = true
           console.error(err)
         } finally {
           this.loading.assignation = false
@@ -1317,14 +1369,12 @@ export default {
         .catch(console.error)
     },
 
-    confirmPriorityChange() {
+    async confirmPriorityChange() {
       this.loading.changePriority = true
-      this.changeSelectedPriorities({
-        priority: Number(this.priority),
-        callback: () => {
-          this.loading.changePriority = false
-        }
+      await this.changeSelectedPriorities({
+        priority: Number(this.priority)
       })
+      this.loading.changePriority = false
     },
 
     confirmTaskCreation() {
@@ -1355,6 +1405,7 @@ export default {
       this.deleteSelectedTasks()
         .then(() => {
           this.loading.taskDeletion = false
+          this.clearSelectedTasks()
         })
         .catch(err => {
           console.error(err)
@@ -1521,9 +1572,7 @@ export default {
     },
 
     selectBar(barName) {
-      localStorage.setItem(`${this.storagePrefix}-selected-bar`, barName, {
-        expires: '1M'
-      })
+      localStorage.setItem(`${this.storagePrefix}-selected-bar`, barName)
       if (this.selectedBar !== barName) {
         this.selectedBar = barName
       } else {
@@ -1576,14 +1625,9 @@ export default {
       if (this.selectedTasks.size === 0) {
         availableTaskStatuses = []
       } else if (this.isCurrentViewTodos) {
-        const productions = new Map()
-        this.selectedTasks.forEach(task => {
-          const project = this.productionMap.get(task.project_id)
-          productions.set(task.project_id, project)
-        })
-        const statusLists = Array.from(productions.values()).map(
-          p => p.task_statuses
-        )
+        const statusLists = Array.from(this.selectedTasks.values())
+          .map(task => this.productionMap.get(task.project_id)?.task_statuses)
+          .filter(Boolean)
         const availableStatus = new Set(intersection(statusLists))
         availableTaskStatuses = this.taskStatusForCurrentUser.filter(status =>
           availableStatus.has(status.id)
@@ -1656,26 +1700,28 @@ export default {
     nbSelectedTasks: {
       immediate: true,
       handler() {
-        this.selectedTaskIds = Array.from(this.selectedTasks.keys())
         if (this.nbSelectedTasks > 0) {
-          let isShotSelected = false
-          let isAssetSelected = false
           this.setAvailableStatuses()
-          this.selectedTaskIds.forEach(taskId => {
-            const task = this.selectedTasks.get(taskId)
-            if (task && task.sequence_name) {
-              isShotSelected = true
-            } else {
-              isAssetSelected = true
-            }
-          })
-          if (isShotSelected && isAssetSelected) {
-            this.customActions = this.allCustomActions
-          } else if (isShotSelected) {
-            this.customActions = this.shotCustomActions
-          } else {
-            this.customActions = this.assetCustomActions
+
+          const selectedTypes = {
+            Asset: false,
+            Shot: false,
+            Sequence: false,
+            Edit: false,
+            Episode: false
           }
+          this.selectedTasks.forEach(task => {
+            const type = this.taskTypeMap.get(task.task_type_id)
+            selectedTypes[type?.for_entity] = true
+          })
+
+          this.customActions = this.getCustomActionsByType(
+            selectedTypes.Asset,
+            selectedTypes.Shot,
+            selectedTypes.Sequence,
+            selectedTypes.Edit,
+            selectedTypes.Episode
+          )
 
           if (this.customActions.length > 0) {
             const isUrlSelected =
@@ -1699,13 +1745,8 @@ export default {
       }
     },
 
-    selectedTasks() {
-      this.selectedTaskIds = Array.from(this.selectedTasks.keys())
-    },
-
     $route(oldRoute, newRoute) {
       if (oldRoute.name !== newRoute.name) {
-        this.selectedTaskIds = Array.from(this.selectedTasks.keys())
         if (this.nbSelectedTasks > 0) {
           this.clearSelectedTasks()
         }
@@ -1764,6 +1805,10 @@ export default {
   background: #fcfcff;
   overflow-x: auto;
   overflow-y: hidden;
+}
+.is-danger {
+  color: #ff3860;
+  font-style: italic;
 }
 
 .menu-item {
@@ -1856,6 +1901,12 @@ export default {
 .spinner {
   margin: auto;
   margin-top: 0.5em;
+}
+
+.disclaimer {
+  font-size: 0.8em;
+  font-style: italic;
+  text-align: center;
 }
 
 .tags {

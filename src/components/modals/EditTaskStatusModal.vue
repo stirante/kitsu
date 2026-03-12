@@ -22,7 +22,7 @@
             input-class="task-status-name"
             :label="$t('task_status.fields.name')"
             @enter="confirmClicked"
-            v-model="form.name"
+            v-model.trim="form.name"
             v-focus
             v-if="taskStatusToEdit?.short_name !== 'todo'"
           />
@@ -32,7 +32,7 @@
             :label="$t('task_status.fields.short_name')"
             :maxlength="8"
             @enter="confirmClicked"
-            v-model="form.short_name"
+            v-model.trim="form.short_name"
             v-if="taskStatusToEdit?.short_name !== 'todo'"
           />
           <textarea-field
@@ -47,6 +47,13 @@
             @enter="confirmClicked"
             v-model="form.is_default"
             :disabled="form.for_concept === 'true'"
+          />
+          <boolean-field
+            class="mr05 mb05"
+            :label="$t('task_status.fields.is_wip')"
+            @enter="confirmClicked"
+            v-model="form.is_wip"
+            v-if="form.is_default === 'false'"
           />
           <boolean-field
             class="mr05 mb05"
@@ -162,9 +169,11 @@ export default {
         short_name: '',
         description: '',
         color: '#999999',
-        is_done: 'false',
-        is_feedback_request: 'false',
         is_default: 'false',
+        is_wip: 'false',
+        is_done: 'false',
+        is_retake: 'false',
+        is_feedback_request: 'false',
         archived: 'false'
       },
       colors: [
@@ -205,6 +214,14 @@ export default {
 
   methods: {
     confirmClicked() {
+      if (!this.form.name?.length && this.$refs.nameField) {
+        this.$refs.nameField.focus()
+        return
+      }
+      if (!this.form.short_name?.length && this.$refs.shortNameField) {
+        this.$refs.shortNameField.focus()
+        return
+      }
       this.$emit('confirm', this.form)
     },
 
@@ -215,11 +232,12 @@ export default {
           short_name: this.taskStatusToEdit.short_name,
           description: this.taskStatusToEdit.description,
           color: this.taskStatusToEdit.color,
-          is_done: String(this.taskStatusToEdit.is_done),
+          is_default: String(this.taskStatusToEdit.is_default || false),
+          is_wip: String(this.taskStatusToEdit.is_wip || false),
+          is_done: String(this.taskStatusToEdit.is_done || false),
           is_retake: String(this.taskStatusToEdit.is_retake || false),
           is_artist_allowed: String(this.taskStatusToEdit.is_artist_allowed),
           is_client_allowed: String(this.taskStatusToEdit.is_client_allowed),
-          is_default: String(this.taskStatusToEdit.is_default || false),
           is_feedback_request: String(
             this.taskStatusToEdit.is_feedback_request || false
           ),

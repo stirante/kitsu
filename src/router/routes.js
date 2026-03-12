@@ -2,29 +2,23 @@ import Bowser from 'bowser'
 import { nextTick } from 'vue'
 
 import auth from '@/lib/auth'
-import lang from '@/lib/lang'
-import timezone from '@/lib/timezone'
 import init from '@/lib/init'
+import lang from '@/lib/lang'
+import sentry from '@/lib/sentry'
+import timezone from '@/lib/timezone'
 
-import userStore from '@/store/modules/user'
+import peopleStore from '@/store/modules/people'
 import taskTypeStore from '@/store/modules/tasktypes'
+import userStore from '@/store/modules/user'
 import store from '@/store'
 
-import Assets from '@/components/pages/Assets.vue'
 import Login from '@/components/pages/Login.vue'
 import Main from '@/components/Main.vue'
-import NewProduction from '@/components/pages/production/NewProduction.vue'
-import Notifications from '@/components/pages/Notifications.vue'
-import OpenProductions from '@/components/pages/OpenProductions.vue'
-import ProductionNewsFeed from '@/components/pages/ProductionNewsFeed.vue'
-import Shots from '@/components/pages/Shots.vue'
-import TaskType from '@/components/pages/TaskType.vue'
-import Todos from '@/components/pages/Todos.vue'
-import Edits from '@/components/pages/Edits.vue'
 
-const AssetLibrary = () => import('@/components/pages/AssetLibrary.vue')
 const AllTasks = () => import('@/components/pages/AllTasks.vue')
 const Asset = () => import('@/components/pages/Asset.vue')
+const AssetLibrary = () => import('@/components/pages/AssetLibrary.vue')
+const Assets = () => import('@/components/pages/Assets.vue')
 const AssetTypes = () => import('@/components/pages/AssetTypes.vue')
 const Backgrounds = () => import('@/components/pages/Backgrounds.vue')
 const Bots = () => import('@/components/pages/Bots.vue')
@@ -35,21 +29,31 @@ const Concepts = () => import('@/components/pages/Concepts.vue')
 const CustomActions = () => import('@/components/pages/CustomActions.vue')
 const Departments = () => import('@/components/pages/Departments.vue')
 const Edit = () => import('@/components/pages/Edit.vue')
+const Edits = () => import('@/components/pages/Edits.vue')
 const EntityChats = () => import('@/components/pages/EntityChats.vue')
 const EntitySearch = () => import('@/components/pages/EntitySearch.vue')
 const Episode = () => import('@/components/pages/Episode.vue')
 const Episodes = () => import('@/components/pages/Episodes.vue')
 const EpisodeStats = () => import('@/components/pages/EpisodeStats.vue')
 const FirstConnection = () => import('@/components/pages/FirstConnection.vue')
+const HardwareItems = () => import('@/components/pages/HardwareItems.vue')
+const Login2FA = () => import('@/components/pages/Login2FA.vue')
 const Logs = () => import('@/components/pages/Logs.vue')
 const MainSchedule = () => import('@/components/pages/MainSchedule.vue')
 const MyChecks = () => import('@/components/pages/MyChecks.vue')
+const NewProduction = () =>
+  import('@/components/pages/production/NewProduction.vue')
 const NotFound = () => import('@/components/pages/NotFound.vue')
+const Notifications = () => import('@/components/pages/Notifications.vue')
+const OpenProductions = () => import('@/components/pages/OpenProductions.vue')
 const People = () => import('@/components/pages/People.vue')
 const Person = () => import('@/components/pages/Person.vue')
 const Playlist = () => import('@/components/pages/Playlist.vue')
+const Plugin = () => import('@/components/pages/Plugin.vue')
 const ProductionAssetTypes = () =>
   import('@/components/pages/ProductionAssetTypes.vue')
+const ProductionNewsFeed = () =>
+  import('@/components/pages/ProductionNewsFeed.vue')
 const ProductionQuota = () => import('@/components/pages/ProductionQuota.vue')
 const Productions = () => import('@/components/pages/Productions.vue')
 const ProductionSchedule = () =>
@@ -57,9 +61,9 @@ const ProductionSchedule = () =>
 const ProductionSettings = () =>
   import('@/components/pages/ProductionSettings.vue')
 const Profile = () => import('@/components/pages/Profile.vue')
-const ResetPassword = () => import('@/components/pages/ResetPassword.vue')
 const ResetChangePassword = () =>
   import('@/components/pages/ResetChangePassword.vue')
+const ResetPassword = () => import('@/components/pages/ResetPassword.vue')
 const SalaryScale = () => import('@/components/pages/budget/SalaryScale.vue')
 const Sequence = () => import('@/components/pages/Sequence.vue')
 const Sequences = () => import('@/components/pages/Sequences.vue')
@@ -67,16 +71,20 @@ const SequenceStats = () => import('@/components/pages/SequenceStats.vue')
 const ServerDown = () => import('@/components/pages/ServerDown.vue')
 const Settings = () => import('@/components/pages/Settings.vue')
 const Shot = () => import('@/components/pages/Shot.vue')
+const Shots = () => import('@/components/pages/Shots.vue')
+const SoftwareLicenses = () => import('@/components/pages/SoftwareLicenses.vue')
 const StatusAutomations = () =>
   import('@/components/pages/StatusAutomations.vue')
-const Task = () => import('@/components/pages/Task.vue')
 const Studios = () => import('@/components/pages/Studios.vue')
+const Task = () => import('@/components/pages/Task.vue')
 const TaskStatus = () => import('@/components/pages/TaskStatus.vue')
+const TaskType = () => import('@/components/pages/TaskType.vue')
 const TaskTypes = () => import('@/components/pages/TaskTypes.vue')
 const Team = () => import('@/components/pages/Team.vue')
-const TeamSchedule = () => import('@/components/pages/TeamSchedule')
+const TeamSchedule = () => import('@/components/pages/TeamSchedule.vue')
 const Timesheets = () => import('@/components/pages/Timesheets.vue')
 const Timers = () => import('@/components/pages/Timers.vue')
+const Todos = () => import('@/components/pages/Todos.vue')
 const WrongBrowser = () => import('@/components/pages/WrongBrowser.vue')
 
 const ADMIN_PAGES = [
@@ -125,6 +133,10 @@ export const routes = [
         } else {
           timezone.setTimezone()
           lang.setLocale(userStore.state.user.locale)
+          sentry.setContext(
+            peopleStore.state.organisation,
+            userStore.state.user
+          )
           if (store.state.productions.openProductions.length === 0) {
             init(err => {
               if (err) {
@@ -138,11 +150,10 @@ export const routes = [
               }
             })
           } else {
+            store.commit('DATA_LOADING_END')
             if (!userStore.getters.isCurrentUserArtist(userStore.state)) {
-              store.commit('DATA_LOADING_END')
               next({ name: 'open-productions' })
             } else {
-              store.commit('DATA_LOADING_END')
               next({ name: 'todos' })
             }
           }
@@ -162,6 +173,10 @@ export const routes = [
         } else {
           timezone.setTimezone()
           lang.setLocale(userStore.state.user.locale)
+          sentry.setContext(
+            peopleStore.state.organisation,
+            userStore.state.user
+          )
           const isProhibited =
             !userStore.getters.isCurrentUserAdmin(userStore.state) &&
             to &&
@@ -245,6 +260,18 @@ export const routes = [
         name: 'status-automations',
         path: 'status-automations',
         component: StatusAutomations
+      },
+
+      {
+        name: 'software-licenses',
+        path: 'software-licenses',
+        component: SoftwareLicenses
+      },
+
+      {
+        name: 'hardware-items',
+        path: 'hardware-items',
+        component: HardwareItems
       },
 
       {
@@ -381,6 +408,12 @@ export const routes = [
       },
 
       {
+        path: '/plugins/:plugin_id',
+        component: Plugin,
+        name: 'plugin'
+      },
+
+      {
         path: 'settings',
         component: Settings,
         name: 'settings'
@@ -472,6 +505,18 @@ export const routes = [
         path: 'productions/:production_id/brief',
         component: Brief,
         name: 'brief'
+      },
+
+      {
+        path: 'productions/:production_id/plugins/:plugin_id',
+        component: Plugin,
+        name: 'production-plugin'
+      },
+
+      {
+        path: 'productions/:production_id/episodes/:episode_id/plugins/:plugin_id',
+        component: Plugin,
+        name: 'episode-production-plugin'
       },
 
       {
@@ -854,6 +899,9 @@ export const routes = [
         path: 'productions/:production_id/episodes/task-types/:task_type_id',
         component: TaskType,
         name: 'episodes-task-type',
+        meta: {
+          section: 'episodes'
+        },
         children: [
           {
             name: 'episodes-task-type-schedule',
@@ -887,6 +935,14 @@ export const routes = [
     path: '/login',
     component: Login,
     name: 'login'
+  },
+  {
+    path: '/login/2fa',
+    component: Login2FA,
+    name: 'login-2fa',
+    beforeEnter: (to, from) => {
+      if (!store.getters.user) return { name: 'login' }
+    }
   },
   {
     path: '/logout',

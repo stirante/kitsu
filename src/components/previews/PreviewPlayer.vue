@@ -6,7 +6,7 @@
           <div
             class="canvas-wrapper"
             ref="canvas-wrapper"
-            oncontextmenu="return false;"
+            oncontextmenu="return false"
             @click="onCanvasClicked"
             v-show="!isZoomPan && isAnnotationsDisplayed"
           >
@@ -16,7 +16,7 @@
           <div
             class="canvas-comparison-wrapper"
             ref="canvas-comparison-wrapper"
-            oncontextmenu="return false;"
+            oncontextmenu="return false"
             @click="onCanvasClicked"
             v-show="
               !isZoomPan &&
@@ -132,7 +132,10 @@
       />
 
       <div class="buttons flexrow pull-bottom" ref="buttons">
-        <div class="left flexrow" v-if="isMovie || isSound || is3DAnimation">
+        <div
+          class="left flexrow"
+          v-if="isMovie || isSound || (is3DModel && is3DAnimation)"
+        >
           <button-simple
             class="flexrow-item"
             :title="$t('playlists.actions.play')"
@@ -154,7 +157,7 @@
             :is-dark="true"
             :thin="true"
             v-model="current3DAnimation"
-            v-if="is3DAnimation"
+            v-if="is3DModel && is3DAnimation"
           />
         </div>
 
@@ -176,20 +179,14 @@
             v-if="(!light || fullScreen) && isMovie"
           />
 
-          <button-simple
+          <button-sound
             class="flexrow-item"
-            :title="$t('playlists.actions.unmute')"
-            icon="soundoff"
-            @click="onToggleSoundClicked"
-            v-if="isMuted"
+            @change-sound="onToggleSoundClicked"
+            v-model:muted="isMuted"
+            v-model:volume="volume"
           />
-          <button-simple
-            class="flexrow-item"
-            :title="$t('playlists.actions.mute')"
-            icon="soundon"
-            @click="onToggleSoundClicked"
-            v-else
-          />
+
+          <speed-button class="flexrow-item" v-model="speed" v-if="isMovie" />
 
           <span
             class="flexrow-item time-indicator"
@@ -566,7 +563,7 @@
 
 <script>
 import { fabric } from 'fabric'
-import { PSBrush } from '@arch-inc/fabricjs-psbrush'
+import { PSBrush } from 'fabricjs-psbrush'
 
 import {
   ArrowUpRightIcon,
@@ -591,6 +588,7 @@ import { fullScreenMixin } from '@/components/mixins/fullscreen'
 import { domMixin } from '@/components/mixins/dom'
 
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
+import ButtonSound from '@/components/widgets/ButtonSound.vue'
 import BrowsingBar from '@/components/previews/BrowsingBar.vue'
 import ColorPicker from '@/components/widgets/ColorPicker.vue'
 import Combobox from '@/components/widgets/Combobox.vue'
@@ -598,6 +596,7 @@ import ComboboxStyled from '@/components/widgets/ComboboxStyled.vue'
 import PencilPicker from '@/components/widgets/PencilPicker.vue'
 import PreviewViewer from '@/components/previews/PreviewViewer.vue'
 import RevisionPreview from '@/components/previews/RevisionPreview.vue'
+import SpeedButton from '@/components/widgets/SpeedButton.vue'
 const TaskInfo = () => import('@/components/sides/TaskInfo.vue')
 import VideoProgress from '@/components/previews/VideoProgress.vue'
 
@@ -612,6 +611,7 @@ export default {
     ArrowUpRightIcon,
     BrowsingBar,
     ButtonSimple,
+    ButtonSound,
     ColorPicker,
     Combobox,
     ComboboxStyled,
@@ -621,6 +621,7 @@ export default {
     PencilPicker,
     PreviewViewer,
     RevisionPreview,
+    SpeedButton,
     TaskInfo: defineAsyncComponent(TaskInfo),
     VideoProgress
   },
@@ -715,6 +716,7 @@ export default {
       isRepeating: false,
       isTyping: false,
       isWireframe: false,
+      isZoomPan: false,
       maxDuration: '00:00:00:00',
       movieDimensions: {
         width: 1920,
@@ -725,13 +727,14 @@ export default {
       pencilPalette: ['big', 'medium', 'small'],
       previewToCompare: null,
       previewToCompareId: null,
+      speed: 3,
       taskTypeId: this.entityPreviewFIles
         ? Object.keys(this.entityPreviewFiles)[0]
         : null,
       textColor: '#ff3860',
       videoDuration: 0,
+      volume: 50,
       width: 0,
-      isZoomPan: false,
       comparisonMode: 'sidebyside',
       comparisonModeOptions: [
         {
@@ -781,6 +784,13 @@ export default {
       this.onObjectBackgroundSelected()
     }
     this.resetPencilConfiguration()
+    if (this.isMuted) {
+      this.previewViewer.setVolume(0)
+    } else {
+      this.volume =
+        localPreferences.getPreference('player:volume') || this.volume
+      this.previewViewer.setVolume(this.volume)
+    }
   },
 
   beforeUnmount() {
@@ -941,17 +951,6 @@ export default {
       return !this.isPicture && !this.isMovie // && !this.is3DModel && !this.isPdf
     },
 
-    isFullScreenEnabled() {
-      return !!(
-        document.fullscreenEnabled ||
-        document.mozFullScreenEnabled ||
-        document.msFullscreenEnabled ||
-        document.webkitSupportsFullscreen ||
-        document.webkitFullscreenEnabled ||
-        document.createElement('video').webkitRequestFullScreen
-      )
-    },
-
     originalPath() {
       if (this.currentPreview) {
         const previewId = this.currentPreview.id
@@ -1040,7 +1039,7 @@ export default {
       if (this.isComparing && this.isComparisonOverlay) {
         switch (this.comparisonMode) {
           case 'overlay0':
-            return 1
+            return 0
           case 'overlay25':
             return 0.25
           case 'overlay50':
@@ -1048,7 +1047,7 @@ export default {
           case 'overlay75':
             return 0.75
           case 'overlay100':
-            return 0
+            return 1
           default:
             return 1
         }
@@ -1407,15 +1406,11 @@ export default {
 
     setFullScreen() {
       this.endAnnotationSaving()
-      const promise = this.documentSetFullScreen(this.container)
-      if (promise) {
-        promise.then(() => {
+      this.documentSetFullScreen(this.container)
+        .then(() => {
           this.fullScreen = true
         })
-      } else {
-        // fallback for legacy browsers
-        this.fullScreen = true
-      }
+        .catch(console.error)
       this.$nextTick(() => {
         // Needed to avoid fullscreen button to be called with space bar.
         this.clearFocus()
@@ -1424,26 +1419,22 @@ export default {
 
     exitFullScreen() {
       this.endAnnotationSaving()
-      const promise = this.documentExitFullScreen()
-      if (promise) {
-        promise.then(() => {
+      this.documentExitFullScreen()
+        .then(() => {
           this.fullScreen = false
           this.$nextTick(() => {
-            this.previewViewer.resize()
-            this.comparisonViewer.resize()
+            this.previewViewer?.resize()
+            this.comparisonViewer?.resize()
           })
         })
-      } else {
-        // fallback for legacy browsers
-        this.fullScreen = false
-      }
+        .catch(console.error)
       this.isComparing = false
       this.isCommentsHidden = true
       this.$nextTick(() => {
         // Needed to avoid fullscreen button to be called with space bar.
         this.clearFocus()
-        this.previewViewer.resize()
-        this.comparisonViewer.resize()
+        this.previewViewer?.resize()
+        this.comparisonViewer?.resize()
         this.triggerResize()
       })
     },
@@ -1465,8 +1456,8 @@ export default {
         this.isCommentsHidden = true
         this.endAnnotationSaving()
         this.$nextTick(() => {
-          this.previewViewer.resize()
-          this.comparisonViewer.resize()
+          this.previewViewer?.resize()
+          this.comparisonViewer?.resize()
           this.clearFocus()
           this.$nextTick(() => {
             this.loadAnnotation()
@@ -1581,6 +1572,11 @@ export default {
       const defaultId =
         this.currentProduction?.default_preview_background_file_id
       return defaultId ? background.id === defaultId : background.is_default
+    },
+
+    setPlayerSpeed(rate) {
+      this.previewViewer.setSpeed(rate)
+      this.comparisonViewer.setSpeed(rate)
     },
 
     // Annotations
@@ -1887,6 +1883,7 @@ export default {
     onKeyDown(event) {
       const PREVANNKEY = ','
       const NEXTANNKEY = '.'
+      const OKEY = 'o'
 
       if (!['INPUT', 'TEXTAREA'].includes(event.target.tagName)) {
         if (event.keyCode === 46 || event.keyCode === 8) {
@@ -1934,13 +1931,32 @@ export default {
         } else if ((event.ctrlKey || event.metaKey) && event.keyCode === 86) {
           // ctrl + v
           this.pasteAnnotations()
-        } else if (event.code === 27) {
+        } else if (event.altKey && event.key === OKEY) {
+          event.preventDefault()
+          event.stopPropagation()
+          this.toggleFullOverlayComparison()
+        } else if (event.code === 'Escape') {
           // Esc
           if (this.fullScreen) {
             this.onFullScreenChange()
           }
         }
       }
+    },
+
+    async toggleFullOverlayComparison() {
+      if (!this.isComparing) {
+        this.isComparing = true
+        await this.$nextTick()
+        await this.$nextTick()
+      }
+      this.$nextTick(() => {
+        if (this.comparisonMode === 'overlay100') {
+          this.comparisonMode = 'overlay0'
+        } else {
+          this.comparisonMode = 'overlay100'
+        }
+      })
     },
 
     onCommentClicked() {
@@ -1993,17 +2009,7 @@ export default {
         false
       )
       this.container.addEventListener(
-        'mozfullscreenchange',
-        this.onFullScreenChange,
-        false
-      )
-      this.container.addEventListener(
-        'MSFullscreenChange',
-        this.onFullScreenChange,
-        false
-      )
-      this.container.addEventListener(
-        'webkitfullscreenchange',
+        'webkitfullscreenchange', // Safari < 16.4
         this.onFullScreenChange,
         false
       )
@@ -2018,17 +2024,7 @@ export default {
         false
       )
       this.container.removeEventListener(
-        'mozfullscreenchange',
-        this.onFullScreenChange,
-        false
-      )
-      this.container.removeEventListener(
-        'MSFullscreenChange',
-        this.onFullScreenChange,
-        false
-      )
-      this.container.removeEventListener(
-        'webkitfullscreenchange',
+        'webkitfullscreenchange', // Safari < 16.4
         this.onFullScreenChange,
         false
       )
@@ -2327,6 +2323,17 @@ export default {
       } else {
         this.previewViewer.pauseZoom()
       }
+    },
+
+    speed() {
+      const rates = [0.25, 0.5, 1, 1.5, 2]
+      const rate = rates[this.speed - 1]
+      this.setPlayerSpeed(rate)
+    },
+
+    volume() {
+      this.previewViewer.setVolume(this.volume)
+      localPreferences.setPreference('player:volume', this.volume)
     }
   }
 }

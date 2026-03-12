@@ -61,7 +61,7 @@
             @dragleave="onFileDragLeave"
             v-if="isDraggingFile"
           >
-            Drop new concepts
+            {{ $t('concepts.drop_new_concepts') }}
           </div>
           <ul class="items">
             <li
@@ -114,6 +114,7 @@
 </template>
 
 <script>
+import assetsStore from '@/store/modules/assets.js'
 import { mapGetters, mapActions } from 'vuex'
 import { firstBy } from 'thenby'
 
@@ -197,15 +198,18 @@ export default {
 
   computed: {
     ...mapGetters([
-      'assetMap',
+      'concepts',
       'currentProduction',
-      'displayedConcepts',
       'isDarkTheme',
       'isTVShow',
       'personMap',
       'selectedConcepts',
       'taskStatusMap'
     ]),
+
+    assetMap() {
+      return assetsStore.cache.assetMap
+    },
 
     publishers() {
       const publishers = new Map()
@@ -253,7 +257,7 @@ export default {
     },
 
     filteredConcepts() {
-      let concepts = [...this.displayedConcepts]
+      let concepts = [...this.concepts]
 
       if (this.filters.taskStatusId) {
         concepts = concepts.filter(
@@ -441,6 +445,19 @@ export default {
         const productionId = this.$route.params.production_id
         if (this.currentProduction?.id === productionId) {
           this.reset()
+        }
+      }
+    }
+  },
+
+  socket: {
+    events: {
+      'task:status-changed'(eventData) {
+        const concept = this.concepts.find(
+          concept => concept.tasks[0].id === eventData.task_id
+        )
+        if (concept) {
+          concept.tasks[0].task_status_id = eventData.new_task_status_id
         }
       }
     }

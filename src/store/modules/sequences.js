@@ -77,7 +77,9 @@ const helpers = {
     },
     applySequenceFilters = true
   ) {
-    const taskTypes = Array.from(taskTypeMap.values())
+    const taskTypes = Array.from(taskTypeMap.values()).filter(
+      taskType => taskType.for_entity === 'Sequence'
+    )
     const taskStatuses = Array.from(taskStatusMap.values())
     const query = sequenceSearch
     const keywords = getKeyWords(query) || []
@@ -363,7 +365,7 @@ const actions = {
         production,
         userFilters
       })
-      return Promise.resolve(sequences)
+      return sequences
     })
   },
 
@@ -378,6 +380,11 @@ const actions = {
     const taskMap = rootGetters.taskMap
     const taskStatusMap = rootGetters.taskStatusMap
     const taskTypeMap = rootGetters.taskTypeMap
+
+    if (!production) {
+      return []
+    }
+
     if (!episode && isTVShow) {
       if (rootGetters.episodes && rootGetters.episodes.length > 0) {
         episode = rootGetters.episodes[0]
@@ -393,24 +400,30 @@ const actions = {
           taskTypeMap,
           taskStatusMap
         })
-        return Promise.resolve([])
+        return []
       }
     }
     return shotsApi
       .getSequencesWithTasks(production, episode)
       .then(sequences => {
-        commit(SET_SEQUENCES_WITH_TASKS, {
-          sequences,
-          episodeMap,
-          personMap,
-          production,
-          routeSequenceId,
-          taskMap,
-          taskTypeMap,
-          taskStatusMap,
-          userFilters
-        })
-        return Promise.resolve(sequences)
+        if (
+          !isTVShow ||
+          sequences.length === 0 ||
+          sequences[0].episode_id === rootGetters.currentEpisode.id
+        ) {
+          commit(SET_SEQUENCES_WITH_TASKS, {
+            sequences,
+            episodeMap,
+            personMap,
+            production,
+            routeSequenceId,
+            taskMap,
+            taskTypeMap,
+            taskStatusMap,
+            userFilters
+          })
+        }
+        return sequences
       })
   },
 
@@ -443,7 +456,7 @@ const actions = {
       )
       return func
         .runPromiseAsSeries(createTaskPromises)
-        .then(() => Promise.resolve(sequence))
+        .then(() => sequence)
         .catch(console.error)
     })
   },
@@ -461,7 +474,7 @@ const actions = {
   deleteSequence({ commit, state }, sequence) {
     return shotsApi.deleteSequence(sequence).then(() => {
       commit(REMOVE_SEQUENCE, sequence)
-      return Promise.resolve(sequence)
+      return sequence
     })
   },
 
@@ -478,7 +491,7 @@ const actions = {
         } else {
           commit(ADD_SEQUENCE, { sequence, episodeMap })
         }
-        return Promise.resolve(sequence)
+        return sequence
       })
       .catch(console.error)
   },
@@ -490,7 +503,7 @@ const actions = {
       .getSequenceStats(productionId)
       .then(sequenceStats => {
         commit(SET_SEQUENCE_STATS, { sequenceStats, taskTypeMap })
-        return Promise.resolve(sequenceStats)
+        return sequenceStats
       })
       .catch(console.error)
   },
@@ -511,7 +524,7 @@ const actions = {
           production,
           taskTypeMap
         })
-        return Promise.resolve(sequenceRetakeStats)
+        return sequenceRetakeStats
       })
       .catch(console.error)
   },
@@ -1066,14 +1079,15 @@ const mutations = {
     state.sequenceIndex = buildSequenceIndex(cache.sequences)
   },
 
-  [REMOVE_SEQUENCE](state, sequence) {
-    delete cache.sequenceMap.get(sequence.id)
-    cache.sequences = removeModelFromList(cache.sequences, sequence)
+  [REMOVE_SEQUENCE](state, sequenceToDelete) {
+    cache.sequenceMap.delete(sequenceToDelete.id)
+    cache.sequences = removeModelFromList(cache.sequences, sequenceToDelete)
+    cache.result = removeModelFromList(cache.result, sequenceToDelete)
+    cache.sequenceIndex = buildSequenceIndex(cache.sequences)
     state.displayedSequences = removeModelFromList(
       state.displayedSequences,
-      sequence
+      sequenceToDelete
     )
-    state.sequenceIndex = buildSequenceIndex(cache.sequences)
   },
 
   [LOCK_SEQUENCE](state, sequence) {

@@ -51,6 +51,8 @@ import {
   SET_PREVIEW,
   UPDATE_EPISODE,
   UPDATE_METADATA_DESCRIPTOR_END,
+  LOCK_EPISODE,
+  UNLOCK_EPISODE,
   RESET_ALL
 } from '@/store/mutation-types'
 
@@ -69,7 +71,9 @@ const helpers = {
       taskMap
     }
   ) {
-    const taskTypes = Array.from(taskTypeMap.values())
+    const taskTypes = Array.from(taskTypeMap.values()).filter(
+      taskType => taskType.for_entity === 'Episode'
+    )
     const taskStatuses = Array.from(taskStatusMap.values())
     const query = episodeSearch
     const keywords = getKeyWords(query) || []
@@ -366,6 +370,9 @@ const actions = {
   },
 
   loadEpisode({ commit, state }, episodeId) {
+    const episode = cache.episodeMap.get(episodeId)
+    if (episode?.lock) return
+
     return shotsApi
       .getEpisode(episodeId)
       .then(episode => {
@@ -384,7 +391,7 @@ const actions = {
     const userFilters = rootGetters.userFilters
     return shotsApi.getEpisodes(currentProduction).then(episodes => {
       commit(LOAD_EPISODES_END, { episodes, routeEpisodeId, userFilters })
-      return Promise.resolve(episodes)
+      return episodes
     })
   },
 
@@ -407,7 +414,7 @@ const actions = {
         taskTypeMap,
         taskStatusMap
       })
-      return Promise.resolve(episodes)
+      return episodes
     })
   },
 
@@ -432,22 +439,25 @@ const actions = {
       )
       return func
         .runPromiseAsSeries(createTaskPromises)
-        .then(() => Promise.resolve(episode))
+        .then(() => episode)
         .catch(console.error)
     })
   },
 
   editEpisode({ commit, state }, data) {
-    return shotsApi.updateEpisode(data).then(episode => {
-      commit(EDIT_EPISODE_END, episode)
-      return Promise.resolve(episode)
+    commit(LOCK_EPISODE, data)
+    commit(EDIT_EPISODE_END, data)
+    return shotsApi.updateEpisode(data).finally(() => {
+      setTimeout(() => {
+        commit(UNLOCK_EPISODE, data)
+      }, 2000)
     })
   },
 
   deleteEpisode({ commit, state }, episode) {
     return shotsApi.deleteEpisode(episode).then(() => {
       commit(REMOVE_EPISODE, episode)
-      return Promise.resolve(episode)
+      return episode
     })
   },
 
@@ -459,7 +469,7 @@ const actions = {
       .getEpisodeStats(productionId)
       .then(episodeStats => {
         commit(SET_EPISODE_STATS, { episodeStats, taskTypeMap, production })
-        return Promise.resolve(episodeStats)
+        return episodeStats
       })
       .catch(console.error)
   },
@@ -480,7 +490,7 @@ const actions = {
           production,
           taskTypeMap
         })
-        return Promise.resolve(episodeRetakeStats)
+        return episodeRetakeStats
       })
       .catch(console.error)
   },
@@ -692,14 +702,15 @@ const mutations = {
     cache.episodeIndex = buildEpisodeIndex(state.episodes)
   },
 
-  [REMOVE_EPISODE](state, episode) {
-    delete cache.episodeMap.get(episode.id)
-    state.episodes = removeModelFromList(state.episodes, episode)
+  [REMOVE_EPISODE](state, episodeToDelete) {
+    cache.episodeMap.delete(episodeToDelete.id)
+    cache.episodes = removeModelFromList(cache.episodes, episodeToDelete)
+    cache.result = removeModelFromList(cache.episodes, episodeToDelete)
+    cache.episodeIndex = buildEpisodeIndex(cache.episodes)
     state.displayedEpisodes = removeModelFromList(
       state.displayedEpisodes,
-      episode
+      episodeToDelete
     )
-    cache.episodeIndex = buildEpisodeIndex(state.episodes)
   },
 
   [SET_EPISODE_SEARCH](state, payload) {
@@ -1002,6 +1013,20 @@ const mutations = {
         delete data[previousDescriptorFieldName]
         episode.data = data
       })
+    }
+  },
+
+  [LOCK_EPISODE](state, episode) {
+    episode = cache.episodeMap.get(episode.id)
+    if (episode) {
+      episode.lock = !episode.lock ? 1 : episode.lock + 1
+    }
+  },
+
+  [UNLOCK_EPISODE](state, episode) {
+    episode = cache.episodeMap.get(episode.id)
+    if (episode) {
+      episode.lock = !episode.lock ? 0 : episode.lock - 1
     }
   }
 }

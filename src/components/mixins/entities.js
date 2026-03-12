@@ -10,6 +10,12 @@ import preferences from '@/lib/preferences'
 export const entitiesMixin = {
   data() {
     return {
+      displaySettings: {
+        bigThumbnails: false,
+        contactSheetMode: false,
+        showAssignations: true,
+        showInfos: true
+      },
       keepTaskPanelOpen: false
     }
   },
@@ -34,6 +40,10 @@ export const entitiesMixin = {
       this.selectedDepartment = 'MY_DEPARTMENTS'
     }
     this.onSelectedDepartmentChanged()
+
+    this.displaySettings =
+      preferences.getObjectPreference(`${this.type}s:display_settings`) ||
+      this.displaySettings
   },
 
   computed: {
@@ -124,10 +134,14 @@ export const entitiesMixin = {
       } else {
         this.departmentFilter = [departmentId]
       }
+      this.$store.commit('CLEAR_SELECTED_TASKS')
       preferences.setPreference(`${this.pageName}:department`, departmentId)
     },
 
     selectableDepartments(forEntity) {
+      if (!this.currentProduction) {
+        return []
+      }
       return this.currentProduction.task_types
         .map(taskTypeId => {
           const taskType = this.taskTypeMap.get(taskTypeId)
@@ -203,7 +217,7 @@ export const entitiesMixin = {
 
     confirmAddThumbnails(forms) {
       const addPreview = form => {
-        this.addThumbnailsModal.markLoading(form.task.entity_id)
+        this.addThumbnailsModal?.markLoading(form.task.entity_id)
         return this.commentTaskWithPreview({
           taskId: form.task.id,
           commentText: '',
@@ -218,8 +232,7 @@ export const entitiesMixin = {
             })
           })
           .then(() => {
-            this.addThumbnailsModal.markUploaded(form.task.entity_id)
-            return Promise.resolve()
+            this.addThumbnailsModal?.markUploaded(form.task.entity_id)
           })
       }
       this.loading.addThumbnails = true
@@ -295,6 +308,16 @@ export const entitiesMixin = {
   watch: {
     selectedDepartment() {
       this.onSelectedDepartmentChanged()
+    },
+
+    displaySettings: {
+      deep: true,
+      handler(newSettings) {
+        preferences.setObjectPreference(
+          `${this.type}s:display_settings`,
+          newSettings
+        )
+      }
     }
   }
 }

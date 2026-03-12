@@ -15,6 +15,7 @@
 
         <form @submit.prevent>
           <text-field
+            autocomplete="new-password"
             :disabled="person.is_generated_from_ldap"
             :label="$t('people.fields.password')"
             ref="first-password"
@@ -23,6 +24,7 @@
             v-model="form.password"
           />
           <text-field
+            autocomplete="new-password"
             :disabled="person.is_generated_from_ldap"
             :label="$t('people.fields.password_2')"
             type="password"
@@ -51,7 +53,13 @@
               'is-loading': isLoading,
               'is-warning': true
             }"
-            :disabled="!(person.totp_enabled || person.email_otp_enabled)"
+            :disabled="
+              !(
+                person.totp_enabled ||
+                person.email_otp_enabled ||
+                person.fido_enabled
+              )
+            "
             @click="disableTwoFactorAuthenticationClicked"
           >
             {{ $t('people.disable_2FA') }}
@@ -184,7 +192,7 @@ export default {
       if (this.active) {
         this.resetForm()
         setTimeout(() => {
-          this.$refs['first-password'].focus()
+          this.$refs['first-password']?.focus()
         }, 100)
       }
     }

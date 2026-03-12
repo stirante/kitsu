@@ -10,7 +10,10 @@
       <div class="columns">
         <div class="column">
           <template v-if="remainingTaskTypes.length > 0">
-            <div class="flexrow mt1 mb1 add-task-type">
+            <div
+              class="flexrow mt1 mb1 add-task-type"
+              v-if="remainingTaskTypesForEntity.length"
+            >
               <combobox-task-type
                 class="flexrow-item selector"
                 :task-type-list="remainingTaskTypesForEntity"
@@ -48,16 +51,6 @@
                 taskListObject.entity === activeTab
               "
             >
-              <!--
-              <thead>
-                <tr>
-                  <th class="th-name">{{ $t('task_status.fields.name') }}</th>
-                  <th class="th-short-name">
-                    {{ $t('task_status.fields.short_name') }}
-                  </th>
-                </tr>
-              </thead>
-              -->
               <draggable
                 class="datatable-body"
                 item-key="taskType.id"
@@ -175,13 +168,9 @@ export default {
     this.resetDisplayedTaskTypes()
     if (this.currentProduction) {
       this.episode_span = this.currentProduction.episode_span
-      this.loadAllScheduleItems(this.currentProduction)
-        .then(() => {
-          this.resetDisplayedTaskTypes()
-        })
-        .catch(err => {
-          console.error(err)
-        })
+      this.loadAllScheduleItems(this.currentProduction).then(() => {
+        this.resetDisplayedTaskTypes()
+      })
     }
   },
 
@@ -505,7 +494,8 @@ td p {
 }
 
 .column {
-  max-width: 400px;
+  flex-basis: 400px;
+  flex-grow: 0;
 }
 
 td.name {
@@ -563,5 +553,9 @@ h2 {
 
 .pointer {
   cursor: pointer;
+}
+
+.grab {
+  cursor: grab;
 }
 </style>

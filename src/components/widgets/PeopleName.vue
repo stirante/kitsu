@@ -8,29 +8,26 @@
       }
     }"
     :title="person.full_name"
-    v-if="withLink"
+    v-if="person?.id && withLink"
   >
     {{ person.full_name }}
   </router-link>
-  <span class="person-name" v-else>
+  <span class="person-name" v-else-if="person">
     {{ person.full_name }}
   </span>
 </template>
 
-<script>
-export default {
-  name: 'people-name',
-  props: {
-    person: {
-      type: Object,
-      required: true
-    },
-    withLink: {
-      type: Boolean,
-      default: false
-    }
+<script setup>
+defineProps({
+  person: {
+    type: Object,
+    required: true
+  },
+  withLink: {
+    type: Boolean,
+    default: false
   }
-}
+})
 </script>
 
 <style lang="scss" scoped>

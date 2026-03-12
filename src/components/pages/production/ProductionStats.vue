@@ -10,8 +10,14 @@
         {{ formatDuration(stats.total_duration) }}
         {{
           isDurationInHours
-            ? $tc('main.hours_spent', formatDuration(stats.total_duration))
-            : $tc('main.days_spent', formatDuration(stats.total_duration))
+            ? $tc(
+                'main.hours_spent',
+                formatDuration(stats.total_duration, false)
+              )
+            : $tc(
+                'main.days_spent',
+                formatDuration(stats.total_duration, false)
+              )
         }}
         /
         {{ formatDuration(stats.total_estimation) }}
@@ -19,9 +25,12 @@
           isDurationInHours
             ? $tc(
                 'main.hours_estimated',
-                formatDuration(stats.total_estimation)
+                formatDuration(stats.total_estimation, false)
               )
-            : $tc('main.days_estimated', formatDuration(stats.total_estimation))
+            : $tc(
+                'main.days_estimated',
+                formatDuration(stats.total_estimation, false)
+              )
         }}
       </span>
     </div>
@@ -59,7 +68,23 @@
           {{ formatDuration(taskTypeStatsMap[taskType.id].total_duration) }}
           /
           {{ formatDuration(taskTypeStatsMap[taskType.id].total_estimation) }}
-          {{ $tc('main.days') }}
+          {{
+            isDurationInHours
+              ? $tc(
+                  'main.hours',
+                  formatDuration(
+                    taskTypeStatsMap[taskType.id].total_estimation,
+                    false
+                  )
+                )
+              : $tc(
+                  'main.days',
+                  formatDuration(
+                    taskTypeStatsMap[taskType.id].total_estimation,
+                    false
+                  )
+                )
+          }}
         </div>
         <div class="color-wrapper flexrow-item">
           <div
