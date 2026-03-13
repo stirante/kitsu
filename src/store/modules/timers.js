@@ -7,7 +7,11 @@ import {
 import { LOAD_TIMERS_END, RESET_ALL } from '@/store/mutation-types'
 
 const initialState = {
-  timers: []
+  timers: [],
+  currentQuery: {
+    date: undefined,
+    embedTask: true
+  }
 }
 
 const state = { ...initialState }
@@ -41,11 +45,14 @@ const getters = {
 const actions = {
   async loadTimers({ commit }, { date, embedTask = true } = {}) {
     const timers = await timersApi.getTimers(date, embedTask)
-    commit(LOAD_TIMERS_END, timers)
+    commit(LOAD_TIMERS_END, {
+      timers,
+      query: { date, embedTask }
+    })
     return timers
   },
 
-  async startTimer({ dispatch, getters }, taskId) {
+  async startTimer({ dispatch, getters, state }, taskId) {
     if (
       getters.currentTimer &&
       isSameTaskId(getters.currentTimer.task_id, taskId)
@@ -58,33 +65,34 @@ const actions = {
     }
 
     await timersApi.startTimer(taskId)
-    return dispatch('loadTimers')
+    return dispatch('loadTimers', state.currentQuery)
   },
 
-  async endTimer({ dispatch }) {
+  async endTimer({ dispatch, state }) {
     await timersApi.endTimer()
-    return dispatch('loadTimers')
+    return dispatch('loadTimers', state.currentQuery)
   },
 
-  async discardTimer({ dispatch }) {
+  async discardTimer({ dispatch, state }) {
     await timersApi.discardTimer()
-    return dispatch('loadTimers')
+    return dispatch('loadTimers', state.currentQuery)
   },
 
-  async updateTimer({ dispatch }, { timerId, data }) {
+  async updateTimer({ dispatch, state }, { timerId, data }) {
     await timersApi.updateTimer(timerId, data)
-    return dispatch('loadTimers')
+    return dispatch('loadTimers', state.currentQuery)
   },
 
-  async deleteTimer({ dispatch }, timerId) {
+  async deleteTimer({ dispatch, state }, timerId) {
     await timersApi.deleteTimer(timerId)
-    return dispatch('loadTimers')
+    return dispatch('loadTimers', state.currentQuery)
   }
 }
 
 const mutations = {
-  [LOAD_TIMERS_END](state, timers) {
+  [LOAD_TIMERS_END](state, { timers, query }) {
     state.timers = timers
+    state.currentQuery = query || { ...initialState.currentQuery }
   },
 
   [RESET_ALL](state) {

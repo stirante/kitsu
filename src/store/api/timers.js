@@ -20,7 +20,7 @@ export default {
   },
 
   discardTimer() {
-    return client.ppost('/api/actions/tasks/timer/discard', {})
+    return client.pdel('/api/actions/tasks/timer/discard')
   },
 
   updateTimer(timerId, data) {

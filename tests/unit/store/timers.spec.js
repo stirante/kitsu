@@ -87,15 +87,32 @@ describe('Timers store', () => {
 
   describe('Mutations', () => {
     test('LOAD_TIMERS_END', () => {
-      const state = { timers: [] }
-      store.mutations[LOAD_TIMERS_END](state, [{ id: '1' }])
+      const state = {
+        timers: [],
+        currentQuery: { date: undefined, embedTask: true }
+      }
+      store.mutations[LOAD_TIMERS_END](state, {
+        timers: [{ id: '1' }],
+        query: { date: '2024-01-01', embedTask: false }
+      })
       expect(state.timers).toEqual([{ id: '1' }])
+      expect(state.currentQuery).toEqual({
+        date: '2024-01-01',
+        embedTask: false
+      })
     })
 
     test('RESET_ALL', () => {
-      const state = { timers: [{ id: '1' }] }
+      const state = {
+        timers: [{ id: '1' }],
+        currentQuery: { date: '2024-01-01', embedTask: false }
+      }
       store.mutations[RESET_ALL](state)
       expect(state.timers).toEqual([])
+      expect(state.currentQuery).toEqual({
+        date: undefined,
+        embedTask: true
+      })
     })
   })
 })

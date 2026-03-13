@@ -177,6 +177,7 @@ import {
   getTrackedMinutesByTaskForDate,
   isSameTaskId
 } from '@/lib/timers'
+import { formatSimpleDateUTC } from '@/lib/time'
 
 import { formatListMixin } from '@/components/mixins/format'
 import { timeMixin } from '@/components/mixins/time'
@@ -236,7 +237,7 @@ export default {
     },
 
     selectedDateStr() {
-      return moment(this.selectedDate).format('YYYY-MM-DD')
+      return formatSimpleDateUTC(this.selectedDate)
     },
 
     displayedTimers() {

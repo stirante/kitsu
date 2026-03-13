@@ -406,7 +406,9 @@ export default {
 
       const taskIds = new Set([
         ...this.tasks.map(task => task.id),
-        ...this.doneTasks.map(task => task.id)
+        ...this.doneTasks.map(task => task.id),
+        ...Object.keys(this.timeSpentMap),
+        this.activeTimerTaskId
       ])
 
       return [...taskIds].reduce(
