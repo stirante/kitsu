@@ -117,6 +117,18 @@ const helpers = {
 
   getTaskStatus(taskStatusId) {
     return taskStatusStore.cache.taskStatusMap.get(taskStatusId)
+  },
+
+  normalizePostedComment(comment) {
+    const previews = comment.previews || comment.preview_files || []
+    return {
+      ...comment,
+      previews: previews.map(preview =>
+        typeof preview === 'string' ? { id: preview } : preview
+      ),
+      attachment_files: comment.attachment_files || [],
+      replies: comment.replies || []
+    }
   }
 }
 
@@ -423,13 +435,20 @@ const actions = {
 
   commentTask(
     { commit },
-    { taskId, taskStatusId, comment, attachment, checklist }
+    { taskId, taskStatusId, comment, attachment, checklist, links }
   ) {
-    const data = { taskId, taskStatusId, comment, attachment, checklist }
-    return tasksApi.commentTask(data).then(comment => {
-      commit(NEW_TASK_COMMENT_END, { comment, taskId })
-      return comment
-    })
+    const data = { taskId, taskStatusId, comment, attachment, checklist, links }
+    return tasksApi
+      .batchCommentTask(data)
+      .promise.then(comments => {
+        const newComment = helpers.normalizePostedComment(comments[0])
+        commit(NEW_TASK_COMMENT_END, { comment: newComment, taskId })
+        return newComment
+      })
+      .catch(err => {
+        err.commentPostStep = 'create_comment'
+        throw err
+      })
   },
 
   commentTaskWithPreview(
@@ -445,93 +464,59 @@ const actions = {
       links
     }
   ) {
-    const data = { taskId, taskStatusId, comment, attachment, checklist, links }
-    const previewForms = [...state.previewForms]
+    const previewForms = form
+      ? [form].concat(state.previewForms.filter(preview => preview !== form))
+      : [...state.previewForms]
+    const data = {
+      taskId,
+      taskStatusId,
+      comment,
+      attachment,
+      checklist,
+      links,
+      revision,
+      previewForms
+    }
     commit(ADD_PREVIEW_START)
-    let newComment
     locks[taskId] = true
-    return (
-      tasksApi
-        .commentTask(data)
-        // Create the comment entry.
-        .then(comment => {
-          newComment = comment
-          const previewData = {
-            taskId,
-            commentId: newComment.id,
-            revision
-          }
-          return tasksApi.addPreview(previewData)
+    const { request, promise } = tasksApi.batchCommentTask(data)
+    if (request) {
+      const uploadName =
+        previewForms[0]?.get('file')?.name || attachment?.[0]?.get('file')?.name
+      request.on('progress', e => {
+        commit(SET_UPLOAD_PROGRESS, {
+          previewId: `comment-${taskId}`,
+          percent: e.percent,
+          name: uploadName || 'comment'
         })
-        // Create the main preview entry.
-        .then(preview => {
-          if (!form) form = previewForms[0]
-          const { request, promise } = tasksApi.uploadPreview(preview.id, form)
-          request.on('progress', e => {
-            commit(SET_UPLOAD_PROGRESS, {
-              previewId: preview.id,
-              percent: e.percent,
-              name: form.get('file').name
-            })
-          })
-          return promise
-        })
-        .then(preview => {
+      })
+    }
+    return promise
+      .then(comments => {
+        const newComment = helpers.normalizePostedComment(comments[0])
+        newComment.previews.forEach(preview => {
           commit(ADD_PREVIEW_END, {
             preview,
             taskId,
             commentId: newComment.id,
             comment: newComment
           })
-          // Create the remaining previews if there are some.
-          if (previewForms.length > 1) {
-            const addPreview = form => {
-              return tasksApi
-                .addExtraPreview(preview.id, taskId, newComment.id)
-                .then(extraPreview => {
-                  const { request, promise } = tasksApi.uploadPreview(
-                    extraPreview.id,
-                    form
-                  )
-                  request.on('progress', e => {
-                    commit(SET_UPLOAD_PROGRESS, {
-                      previewId: extraPreview.id,
-                      percent: e.percent,
-                      name: form.get('file').name
-                    })
-                  })
-                  return promise
-                })
-                .then(preview => {
-                  commit(ADD_PREVIEW_END, {
-                    preview,
-                    taskId,
-                    commentId: newComment.id,
-                    comment: newComment
-                  })
-                  return preview
-                })
-            }
-            const remainingPreviews = previewForms.slice(1)
-            // run promises in sequence
-            return remainingPreviews.reduce(
-              (accumulatorPromise, form) =>
-                accumulatorPromise.then(() => addPreview(form)),
-              Promise.resolve()
-            )
-          } else {
-            return preview
-          }
         })
-        .then(preview => {
-          commit(NEW_TASK_COMMENT_END, { comment: newComment, taskId })
-          commit(CLEAR_UPLOAD_PROGRESS)
-          return { newComment, preview }
-        })
-        .finally(() => {
-          locks[taskId] = false
-        })
-    )
+        commit(NEW_TASK_COMMENT_END, { comment: newComment, taskId })
+        commit(CLEAR_UPLOAD_PROGRESS)
+        return {
+          newComment,
+          preview: newComment.previews[0]
+        }
+      })
+      .catch(err => {
+        commit(CLEAR_UPLOAD_PROGRESS)
+        err.commentPostStep = 'create_comment'
+        throw err
+      })
+      .finally(() => {
+        locks[taskId] = false
+      })
   },
 
   addCommentExtraPreview(
@@ -1383,6 +1368,7 @@ const mutations = {
 
   [CLEAR_UPLOAD_PROGRESS](state) {
     state.uploadProgress = {}
+    state.isSavingCommentPreview = false
   },
 
   [ADD_ANNOTATION](state, { annotations, annotation }) {

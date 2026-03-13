@@ -254,6 +254,7 @@
                 ref="add-comment"
                 :frame="currentFrame"
                 :is-error="errors.addComment"
+                :error-text="commentErrorText"
                 :is-max-retakes-error="errors.addCommentMaxRetakes"
                 :is-loading="loading.addComment"
                 :is-movie="isMovie"
@@ -415,6 +416,7 @@ import {
 import { mapGetters, mapActions } from 'vuex'
 
 import drafts from '@/lib/drafts'
+import { getCommentPostErrorInfo } from '@/lib/comments'
 import { getTaskEntityPath, getTaskEntitiesPath } from '@/lib/path'
 import { getTaskTypePriorityOfProd } from '@/lib/productions'
 import { sortPeople } from '@/lib/sorting'
@@ -524,6 +526,7 @@ export default {
       taskComments: [],
       taskPreviews: [],
       commentToEdit: null,
+      commentErrorText: '',
       selectedPreviewId: null
     }
   },
@@ -1096,6 +1099,7 @@ export default {
       this.loading.addComment = true
       this.errors.addComment = false
       this.errors.addCommentMaxRetakes = false
+      this.commentErrorText = ''
       this.$store
         .dispatch(action, params)
         .then(() => {
@@ -1103,14 +1107,15 @@ export default {
           this.$refs['add-comment']?.reset()
           this.reset()
           this.loading.addComment = false
+          this.commentErrorText = ''
         })
         .catch(err => {
           console.error(err)
-          this.errors.addComment = true
+          const errorInfo = getCommentPostErrorInfo(err)
+          this.errors.addComment = !errorInfo.isRetakeError
+          this.errors.addCommentMaxRetakes = errorInfo.isRetakeError
+          this.commentErrorText = errorInfo.message || this.$t(errorInfo.key)
           this.loading.addComment = false
-          const isRetakeError = err.body?.message?.includes('retake') ?? false
-          this.errors.addComment = !isRetakeError
-          this.errors.addCommentMaxRetakes = isRetakeError
         })
     },
 

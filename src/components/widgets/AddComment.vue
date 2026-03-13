@@ -309,11 +309,8 @@
           v-if="isCurrentUserClient && isMovie"
         />
 
-        <div class="error pull-right" v-if="isError">
-          <em>{{ $t('comments.error') }}</em>
-        </div>
-        <div class="error pull-right" v-if="isMaxRetakesError">
-          <em>{{ $t('comments.max_retakes_error') }}</em>
+        <div class="error pull-right" v-if="isError || isMaxRetakesError">
+          <em>{{ displayedErrorText }}</em>
         </div>
       </div>
     </div>
@@ -430,6 +427,10 @@ export default {
     isError: {
       type: Boolean,
       default: null
+    },
+    errorText: {
+      type: String,
+      default: ''
     },
     isMaxRetakesError: {
       type: Boolean,
@@ -640,6 +641,16 @@ export default {
             !this.link ||
             this.$refs['input-link']?.checkValidity()))
       )
+    },
+
+    displayedErrorText() {
+      if (this.isMaxRetakesError) {
+        return this.$t('comments.max_retakes_error')
+      }
+      if (this.errorText) {
+        return this.errorText
+      }
+      return this.$t('comments.error')
     }
   },
 

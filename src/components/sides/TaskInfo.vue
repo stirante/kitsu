@@ -182,6 +182,7 @@
                   :is-loading="loading.addComment"
                   :preview-forms="previewForms"
                   :is-error="errors.addComment"
+                  :error-text="commentErrorText"
                   :is-max-retakes-error="errors.addCommentMaxRetakes"
                   :fps="currentFps"
                   :frame="currentFrame || currentFrameRaw"
@@ -356,6 +357,7 @@ import { mapGetters, mapActions } from 'vuex'
 
 import csv from '@/lib/csv'
 import drafts from '@/lib/drafts'
+import { getCommentPostErrorInfo } from '@/lib/comments'
 import { getTaskEntityPath, getTaskPath } from '@/lib/path'
 import preferences from '@/lib/preferences'
 import { getTaskTypeStyle } from '@/lib/render'
@@ -477,6 +479,7 @@ export default {
       currentPreviewDlPath: '',
       currentTask: null,
       commentToEdit: null,
+      commentErrorText: '',
       isWide: false,
       isExtraWide: false,
       otherPreviews: [],
@@ -929,6 +932,7 @@ export default {
         this.loading.addComment = true
         this.errors.addComment = false
         this.errors.addCommentMaxRetakes = false
+        this.commentErrorText = ''
         this.$store
           .dispatch(action, params)
           .then(() => {
@@ -936,13 +940,15 @@ export default {
             this.$refs['add-comment']?.reset()
             this.reset()
             this.loading.addComment = false
+            this.commentErrorText = ''
             this.$emit('comment-added')
           })
           .catch(err => {
             console.error(err)
-            const isRetakeError = err.body?.message?.includes('retake') ?? false
-            this.errors.addComment = !isRetakeError
-            this.errors.addCommentMaxRetakes = isRetakeError
+            const errorInfo = getCommentPostErrorInfo(err)
+            this.errors.addComment = !errorInfo.isRetakeError
+            this.errors.addCommentMaxRetakes = errorInfo.isRetakeError
+            this.commentErrorText = errorInfo.message || this.$t(errorInfo.key)
             this.loading.addComment = false
           })
       })

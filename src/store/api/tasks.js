@@ -41,6 +41,48 @@ export default {
     return client.pget(`/api/data/tasks/${taskId}/previews`)
   },
 
+  batchCommentTask(data) {
+    const comment = {
+      task_status_id: data.taskStatusId,
+      text: data.comment,
+      checklist: data.checklist || [],
+      links: data.links || [],
+      revision: data.revision || 0
+    }
+
+    const hasFiles =
+      (data.attachment?.length || 0) > 0 || (data.previewForms?.length || 0) > 0
+
+    if (!hasFiles) {
+      return {
+        promise: client.ppost(
+          `/api/actions/tasks/${data.taskId}/batch-comment`,
+          {
+            comments: [comment]
+          }
+        )
+      }
+    }
+
+    const formData = new FormData()
+    formData.set('comments', JSON.stringify([comment]))
+
+    data.attachment?.forEach((attachment, index) => {
+      formData.append(`attachment_file-0-${index}`, attachment.get('file'))
+    })
+
+    data.previewForms?.forEach((previewForm, index) => {
+      formData.append(`preview_file-0-${index}`, previewForm.get('file'))
+    })
+
+    const { request, promise } = client.ppostFile(
+      `/api/actions/tasks/${data.taskId}/batch-comment`,
+      formData
+    )
+
+    return { request, promise }
+  },
+
   commentTask(data) {
     let commentData = {
       task_status_id: data.taskStatusId,
