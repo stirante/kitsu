@@ -13,19 +13,48 @@
 <script>
 import { mapGetters } from 'vuex'
 import auth from '@/lib/auth'
+import init from '@/lib/init'
 
 export default {
   name: 'server-down',
+  data() {
+    return {
+      retryTimer: null,
+      retryDelay: 10000
+    }
+  },
   computed: {
     ...mapGetters(['isAuthenticated', 'user'])
   },
   mounted() {
-    auth.isServerLoggedIn(err => {
-      if (!err) {
-        const target = this.$store.state.route.query.redirect || '/'
-        this.$router.push(target)
-      }
-    })
+    this.scheduleRetry()
+  },
+  beforeUnmount() {
+    clearTimeout(this.retryTimer)
+  },
+  methods: {
+    scheduleRetry() {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = setTimeout(this.retryConnection, this.retryDelay)
+    },
+    retryConnection() {
+      auth.isServerLoggedIn(err => {
+        if (err) {
+          this.scheduleRetry()
+          return
+        }
+
+        init(initError => {
+          if (initError) {
+            this.scheduleRetry()
+            return
+          }
+
+          const target = this.$store.state.route.query.redirect || '/'
+          this.$router.push(target)
+        })
+      })
+    }
   }
 }
 </script>
