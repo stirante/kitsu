@@ -1240,6 +1240,8 @@ export default {
       end_date: 'End date',
       episode_span: 'Episode spacing',
       fps: 'FPS',
+      git_import_enabled: 'Enable Git import',
+      git_import_repo_url: 'Git repository URL',
       is_clients_isolated: 'Isolate client comments (not visible to each others)',
       is_preview_download_allowed: 'Allow artists to download previews',
       is_publish_default: 'Set comment widget for artists on publish mode by default',

@@ -116,6 +116,17 @@
           v-model="form.is_publish_default_for_artists"
           v-if="currentProduction && currentProduction.id"
         />
+        <checkbox
+          :label="$t('productions.fields.git_import_enabled')"
+          v-model="form.git_import_enabled"
+          v-if="currentProduction && currentProduction.id"
+        />
+        <text-field
+          :label="$t('productions.fields.git_import_repo_url')"
+          @enter="runConfirmation"
+          v-model="form.git_import_repo_url"
+          v-if="currentProduction && currentProduction.id"
+        />
         <text-field
           type="number"
           :step="1"
@@ -158,6 +169,7 @@ import { formatSimpleDate, parseSimpleDate } from '@/lib/time'
 import { PRODUCTION_TYPE_OPTIONS, HOME_PAGE_OPTIONS } from '@/lib/productions'
 
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
+import Checkbox from '@/components/widgets/Checkbox.vue'
 import ComboboxBoolean from '@/components/widgets/ComboboxBoolean.vue'
 import ComboboxStyled from '@/components/widgets/ComboboxStyled.vue'
 import DateField from '@/components/widgets/DateField.vue'
@@ -168,6 +180,7 @@ export default {
   name: 'production-parameters',
 
   components: {
+    Checkbox,
     ComboboxBoolean,
     ComboboxStyled,
     DateField,
@@ -199,6 +212,8 @@ export default {
         is_preview_download_allowed: 'false',
         is_set_preview_automated: 'false',
         is_publish_default_for_artists: 'false',
+        git_import_enabled: false,
+        git_import_repo_url: '',
         ratio: '',
         resolution: '',
         production_type: 'short'
@@ -264,6 +279,7 @@ export default {
       this.storeProductionPicture(null)
 
       if (this.currentProduction) {
+        const gitImport = this.currentProduction.data?.git_import || {}
         this.form = {
           name: this.currentProduction.name,
           code: this.currentProduction.code,
@@ -291,6 +307,8 @@ export default {
             .is_publish_default_for_artists
             ? 'true'
             : 'false',
+          git_import_enabled: !!gitImport.enabled,
+          git_import_repo_url: gitImport.repo_url || '',
           ratio: this.currentProduction.ratio,
           resolution: this.currentProduction.resolution,
           homepage: this.currentProduction.homepage
@@ -309,10 +327,25 @@ export default {
           is_preview_download_allowed: 'false',
           is_set_preview_automated: 'false',
           is_publish_default_for_artists: 'false',
+          git_import_enabled: false,
+          git_import_repo_url: '',
           fps: '',
           ratio: '',
           resolution: '',
           homepage: HOME_PAGE_OPTIONS[0].value
+        }
+      }
+    },
+
+    buildProjectData() {
+      const currentData = this.currentProduction?.data || {}
+      const currentGitImport = currentData.git_import || {}
+      return {
+        ...currentData,
+        git_import: {
+          ...currentGitImport,
+          enabled: this.form.git_import_enabled,
+          repo_url: this.form.git_import_repo_url || ''
         }
       }
     },
@@ -327,6 +360,7 @@ export default {
         await this.editProduction({
           ...this.form,
           id: this.currentProduction.id,
+          data: this.buildProjectData(),
           start_date: formatSimpleDate(this.form.start_date),
           end_date: formatSimpleDate(this.form.end_date)
         })

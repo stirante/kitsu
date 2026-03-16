@@ -130,6 +130,7 @@ export default {
         }
         await this.editProduction({
           ...form,
+          data: this.productionToEdit.data,
           id: this.productionToEdit.id
         })
         this.modals.isEditDisplayed = false
