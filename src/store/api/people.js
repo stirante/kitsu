@@ -1,6 +1,13 @@
 import client from '@/store/api/client'
 import { buildQueryString } from '@/lib/query'
 
+const serializeDateOnly = value => {
+  if (!value) return null
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  if (typeof value === 'string') return value.slice(0, 10)
+  return null
+}
+
 export default {
   getOrganisations() {
     return client.pget('/api/data/organisations')
@@ -48,7 +55,7 @@ export default {
     const data = {
       first_name: person.first_name,
       last_name: person.last_name,
-      email: person.email,
+      email: person.email || null,
       phone: person.phone,
       role: person.role,
       contract_type: person.contract_type,
@@ -59,7 +66,7 @@ export default {
       departments: person.departments,
       studio_id: person.studio_id,
       is_bot: person.is_bot,
-      expiration_date: person.expiration_date?.toJSON().slice(0, 10)
+      expiration_date: serializeDateOnly(person.expiration_date)
     }
     return client.ppost('/api/data/persons', data)
   },
@@ -70,7 +77,7 @@ export default {
 
   generateToken(person) {
     const data = {
-      expiration_date: person.expiration_date?.toJSON().slice(0, 10) || null
+      expiration_date: serializeDateOnly(person.expiration_date)
     }
     return client.pput(`/api/data/persons/${person.id}`, data)
   },

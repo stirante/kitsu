@@ -350,6 +350,10 @@ export default {
     },
 
     isValidEmail() {
+      if (this.form.is_bot) {
+        return true
+      }
+
       if (!this.form.email?.length) {
         return false
       }
@@ -359,10 +363,6 @@ export default {
 
       if (!emailRegex.test(this.form.email)) {
         return false
-      }
-
-      if (this.form.is_bot) {
-        return true
       }
 
       return this.isUniqEmail
@@ -437,7 +437,7 @@ export default {
           studio_id: null,
           expiration_date: null,
           is_bot: this.isBot,
-          email: this.isBot ? this.user.email : null
+          email: null
         }
       }
     }
