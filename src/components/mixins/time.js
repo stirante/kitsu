@@ -4,7 +4,10 @@
 import moment from 'moment-timezone'
 import { mapGetters } from 'vuex'
 
-import { formatFullDateWithTimezone } from '@/lib/time'
+import {
+  formatFullDateWithTimezone,
+  getCurrentDateForTimezone
+} from '@/lib/time'
 
 export const timeMixin = {
   computed: {
@@ -15,7 +18,7 @@ export const timeMixin = {
     },
 
     today() {
-      return moment().toDate()
+      return getCurrentDateForTimezone(this.timezone)
     }
   },
 

@@ -28,6 +28,11 @@ export const formatSimpleDateUTC = date => {
   else return ''
 }
 
+export const getCurrentDateForTimezone = timezone => {
+  const tz = timezone || moment.tz.guess()
+  return moment.tz(tz).startOf('day').utc(true).toDate()
+}
+
 export const formatFullDate = date => {
   if (date) {
     const utcDate = moment.tz(date, 'UTC')
@@ -283,14 +288,14 @@ export const removeBusinessDays = (
 
 export const getDayOffRange = (daysOff = []) => {
   return daysOff.reduce((range, dayOff) => {
-    const startDate = new Date(dayOff.date)
-    const endDate = new Date(dayOff.end_date || dayOff.date)
-    while (startDate <= endDate) {
+    const startDate = parseSimpleDate(dayOff.date)
+    const endDate = parseSimpleDate(dayOff.end_date || dayOff.date)
+    while (startDate.isSameOrBefore(endDate)) {
       range.push({
         ...dayOff,
-        date: startDate.toISOString().slice(0, 10)
+        date: startDate.format('YYYY-MM-DD')
       })
-      startDate.setDate(startDate.getDate() + 1)
+      startDate.add(1, 'days')
     }
     return range
   }, [])

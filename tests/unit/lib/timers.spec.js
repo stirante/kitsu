@@ -5,7 +5,8 @@ import {
   getTimerDurationMinutes,
   getTrackedMinutesByTaskForDate,
   getTaskStoppedTimerMinutesForDate,
-  getTaskTrackedMinutesForDate
+  getTaskTrackedMinutesForDate,
+  isTimerVisibleForDate
 } from '@/lib/timers'
 
 describe('Timers lib', () => {
@@ -61,6 +62,17 @@ describe('Timers lib', () => {
     const now = moment.utc('2024-01-01T11:15:00Z')
 
     expect(getTimerDurationMinutes(timer, now)).toBe(75)
+  })
+
+  test('keeps a newly started running timer visible before the first minute elapses', () => {
+    const timer = {
+      start_time: '2024-01-01T10:00:30Z',
+      end_time: null
+    }
+    const now = moment.utc('2024-01-01T10:00:31Z')
+
+    expect(isTimerVisibleForDate(timer, '2024-01-01', 'UTC', now)).toBe(true)
+    expect(getTimerDateOverlapMinutes(timer, '2024-01-01', 'UTC', now)).toBe(0)
   })
 
   test('computes stopped timer minutes for a task and date', () => {

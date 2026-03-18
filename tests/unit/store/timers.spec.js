@@ -1,4 +1,5 @@
 import store from '@/store/modules/timers'
+import timersApi from '@/store/api/timers'
 import { LOAD_TIMERS_END, RESET_ALL } from '@/store/mutation-types'
 import moment from 'moment-timezone'
 
@@ -55,6 +56,27 @@ describe('Timers store', () => {
       ).toHaveLength(1)
     })
 
+    test('timersForDate includes a running timer immediately after start', () => {
+      const state = {
+        timers: [
+          {
+            id: '1',
+            task_id: 't1',
+            start_time: '2024-01-01T10:00:30Z',
+            end_time: null
+          }
+        ]
+      }
+
+      expect(
+        store.getters.timersForDate(state)({
+          date: '2024-01-01',
+          timezone: 'UTC',
+          now: moment.utc('2024-01-01T10:00:31Z')
+        })
+      ).toHaveLength(1)
+    })
+
     test('trackedTaskDurationForDate', () => {
       const state = {
         timers: [
@@ -102,6 +124,36 @@ describe('Timers store', () => {
       })
     })
 
+    test('LOAD_TIMERS_END normalizes embedded task fields used by timers page', () => {
+      const state = {
+        timers: [],
+        currentQuery: { date: undefined, embedTask: true }
+      }
+
+      store.mutations[LOAD_TIMERS_END](state, {
+        timers: [
+          {
+            id: '1',
+            task_id: 't1',
+            start_time: '2024-01-01T10:00:00Z',
+            end_time: null,
+            task: {
+              id: 't1',
+              entity_name: 'Robot',
+              entity_type_name: 'Asset',
+              estimation: 120,
+              last_preview_file_id: 'preview-1'
+            }
+          }
+        ],
+        query: { date: '2024-01-01', embedTask: true }
+      })
+
+      expect(state.timers[0].task.full_entity_name).toBe('Asset / Robot')
+      expect(state.timers[0].task.task_estimation).toBe(120)
+      expect(state.timers[0].task.entity_preview_file_id).toBe('preview-1')
+    })
+
     test('RESET_ALL', () => {
       const state = {
         timers: [{ id: '1' }],
@@ -113,6 +165,62 @@ describe('Timers store', () => {
         date: undefined,
         embedTask: true
       })
+    })
+  })
+
+  describe('Actions', () => {
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    test('endTimer reloads timers when backend discards a too-short timer', async () => {
+      const dispatch = vi.fn().mockResolvedValue([])
+      const state = {
+        currentQuery: { date: '2024-01-01', embedTask: true }
+      }
+
+      vi.spyOn(timersApi, 'endTimer').mockRejectedValue({
+        response: {
+          body: {
+            message: 'Timer too short'
+          }
+        }
+      })
+
+      await expect(store.actions.endTimer({ dispatch, state })).resolves.toEqual(
+        []
+      )
+      expect(dispatch).toHaveBeenCalledWith('loadTimers', state.currentQuery)
+    })
+
+    test('startTimer still starts a new timer when the previous one was too short', async () => {
+      const dispatch = vi.fn().mockResolvedValue([])
+      const state = {
+        currentQuery: { date: '2024-01-01', embedTask: true }
+      }
+      const getters = {
+        currentTimer: {
+          id: 'timer-1',
+          task_id: 'old-task',
+          end_time: null
+        }
+      }
+
+      vi.spyOn(timersApi, 'endTimer').mockRejectedValue({
+        response: {
+          body: {
+            message: 'Timer too short'
+          }
+        }
+      })
+      const startSpy = vi.spyOn(timersApi, 'startTimer').mockResolvedValue({})
+
+      await expect(
+        store.actions.startTimer({ dispatch, getters, state }, 'new-task')
+      ).resolves.toEqual([])
+
+      expect(startSpy).toHaveBeenCalledWith('new-task')
+      expect(dispatch).toHaveBeenCalledWith('loadTimers', state.currentQuery)
     })
   })
 })

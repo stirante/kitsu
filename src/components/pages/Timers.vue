@@ -24,6 +24,7 @@
             <date-field
               :can-delete="false"
               :with-margin="false"
+              utc
               v-model="selectedDate"
             />
           </div>
@@ -98,7 +99,7 @@
                           }"
                         />
                         <span>
-                          {{ taskForTimer(timer).full_entity_name }}
+                          {{ taskEntityName(timer) }}
                         </span>
                       </div>
                     </router-link>
@@ -138,7 +139,7 @@
                   <td>
                     {{
                       formatDuration(taskDurationWithRunning(timer.task_id))
-                    }}/{{ formatDuration(taskForTimer(timer).task_estimation) }}
+                    }}/{{ formatDuration(taskEstimation(timer)) }}
                     {{ $t('timesheets.hours') }}
                   </td>
                   <td class="end-cell" style="text-align: right">
@@ -361,7 +362,22 @@ export default {
     },
 
     taskForTimer(timer) {
-      return timer.task || this.taskById(timer.task_id)
+      return this.taskById(timer.task_id) || timer.task
+    },
+
+    taskEntityName(timer) {
+      const task = this.taskForTimer(timer)
+      return (
+        task?.full_entity_name ||
+        task?.entity_name ||
+        task?.name ||
+        timer.task_id
+      )
+    },
+
+    taskEstimation(timer) {
+      const task = this.taskForTimer(timer)
+      return task?.task_estimation ?? task?.estimation ?? 0
     },
 
     isOwnTimer(timer) {
@@ -383,13 +399,17 @@ export default {
       this.loadTimersAction({ date: this.selectedDateStr, embedTask: true })
         .then(() => {
           this.isLoading = false
-          this.initLocalTimes()
-          return this.loadUserTimeSpents({ date: this.selectedDateStr })
+          return this.syncTimersView()
         })
         .catch(err => {
           console.error(err)
           this.isLoading = false
         })
+    },
+
+    syncTimersView() {
+      this.initLocalTimes()
+      return this.loadUserTimeSpents({ date: this.selectedDateStr })
     },
 
     initLocalTimes() {
@@ -398,12 +418,12 @@ export default {
       this.timers.forEach(timer => {
         this.timerStart[timer.id] = moment
           .utc(timer.start_time)
-          .local()
+          .tz(this.timezone)
           .format('YYYY-MM-DDTHH:mm')
         if (timer.end_time) {
           this.timerEnd[timer.id] = moment
             .utc(timer.end_time)
-            .local()
+            .tz(this.timezone)
             .format('YYYY-MM-DDTHH:mm')
         }
       })
@@ -412,7 +432,7 @@ export default {
     async onStartTimer() {
       if (!this.selectedTask) return
       await this.startTimerAction(this.selectedTask)
-      this.fetchTimers()
+      await this.syncTimersView()
     },
 
     onEndTimer() {
@@ -420,7 +440,7 @@ export default {
         return
       }
 
-      this.endTimerAction().then(this.fetchTimers)
+      this.endTimerAction().then(this.syncTimersView)
     },
 
     startTick() {
@@ -435,11 +455,12 @@ export default {
         return
       }
 
-      const start_time = moment(this.timerStart[timer.id])
+      const start_time = moment
+        .tz(this.timerStart[timer.id], 'YYYY-MM-DDTHH:mm', this.timezone)
         .utc()
         .format('YYYY-MM-DDTHH:mm:00')
       this.updateTimerAction({ timerId: timer.id, data: { start_time } }).then(
-        this.fetchTimers
+        this.syncTimersView
       )
     },
 
@@ -449,11 +470,12 @@ export default {
         return
       }
 
-      const end_time = moment(this.timerEnd[timer.id])
+      const end_time = moment
+        .tz(this.timerEnd[timer.id], 'YYYY-MM-DDTHH:mm', this.timezone)
         .utc()
         .format('YYYY-MM-DDTHH:mm:00')
       this.updateTimerAction({ timerId: timer.id, data: { end_time } }).then(
-        this.fetchTimers
+        this.syncTimersView
       )
     },
 
@@ -462,7 +484,7 @@ export default {
         return
       }
 
-      this.deleteTimerAction(timer.id).then(this.fetchTimers)
+      this.deleteTimerAction(timer.id).then(this.syncTimersView)
     }
   },
 

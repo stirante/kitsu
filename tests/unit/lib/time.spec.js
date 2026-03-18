@@ -6,6 +6,8 @@ import {
   formatFullDate,
   formatFullDateWithTimezone,
   formatFullDateWithRevertedTimezone,
+  getCurrentDateForTimezone,
+  getDayOffRange,
   formatSimpleDate,
   formatSimpleDateUTC,
   hoursToDays,
@@ -58,6 +60,20 @@ describe('time', () => {
   test('formatSimpleDateUTC', () => {
     const dateString = formatSimpleDateUTC(new Date('2019-09-01T23:00:00-10:00'))
     expect(dateString).toEqual('2019-09-02')
+  })
+
+  test('getCurrentDateForTimezone preserves the user calendar day in UTC date fields', () => {
+    const now = moment.now
+    moment.now = () => new Date('2019-09-01T23:30:00Z').getTime()
+
+    expect(formatSimpleDateUTC(getCurrentDateForTimezone('Europe/Warsaw'))).toEqual(
+      '2019-09-02'
+    )
+    expect(formatSimpleDateUTC(getCurrentDateForTimezone('America/Los_Angeles'))).toEqual(
+      '2019-09-01'
+    )
+
+    moment.now = now
   })
 
   test('formatDate', () => {
@@ -268,6 +284,17 @@ describe('time', () => {
     expect(formatSimpleDate(removeBusinessDays(startDate, 4))).toEqual('2019-10-01')
     const daysOff = [{ date: '2019-10-01' }]
     expect(formatSimpleDate(removeBusinessDays(startDate, 4, daysOff))).toEqual('2019-09-30')
+  })
+
+  test('getDayOffRange keeps date-only ranges stable', () => {
+    expect(
+      getDayOffRange([
+        {
+          date: '2019-10-01',
+          end_date: '2019-10-03'
+        }
+      ]).map(dayOff => dayOff.date)
+    ).toEqual(['2019-10-01', '2019-10-02', '2019-10-03'])
   })
   test('daysToMinutes', () => {
     expect(daysToMinutes({ hours_by_day: 8 }, 8)).toEqual(8 * 8 * 60)

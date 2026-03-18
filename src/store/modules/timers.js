@@ -2,8 +2,9 @@ import timersApi from '@/store/api/timers'
 import {
   isSameTaskId,
   getTaskTrackedMinutesForDate,
-  getTimerDateOverlapMinutes
+  isTimerVisibleForDate
 } from '@/lib/timers'
+import { populateTask } from '@/lib/models'
 import { LOAD_TIMERS_END, RESET_ALL } from '@/store/mutation-types'
 
 const initialState = {
@@ -12,6 +13,48 @@ const initialState = {
     date: undefined,
     embedTask: true
   }
+}
+
+const isTimerTooShortError = error => {
+  const message =
+    error?.response?.body?.message ||
+    error?.response?.message ||
+    error?.body?.message ||
+    error?.message
+
+  return message === 'Timer too short'
+}
+
+const normalizeEmbeddedTask = task => {
+  if (!task) {
+    return task
+  }
+
+  const normalizedTask = { ...task }
+
+  if (
+    normalizedTask.full_entity_name === undefined &&
+    normalizedTask.entity_name &&
+    normalizedTask.entity_type_name
+  ) {
+    populateTask(normalizedTask)
+  }
+
+  if (
+    normalizedTask.task_estimation === undefined &&
+    normalizedTask.estimation !== undefined
+  ) {
+    normalizedTask.task_estimation = normalizedTask.estimation
+  }
+
+  if (
+    normalizedTask.entity_preview_file_id === undefined &&
+    normalizedTask.last_preview_file_id !== undefined
+  ) {
+    normalizedTask.entity_preview_file_id = normalizedTask.last_preview_file_id
+  }
+
+  return normalizedTask
 }
 
 const state = { ...initialState }
@@ -26,8 +69,8 @@ const getters = {
   timersForDate:
     state =>
     ({ date, timezone, now } = {}) =>
-      state.timers.filter(
-        timer => getTimerDateOverlapMinutes(timer, date, timezone, now) > 0
+      state.timers.filter(timer =>
+        isTimerVisibleForDate(timer, date, timezone, now)
       ),
   trackedTaskDurationForDate:
     state =>
@@ -61,7 +104,13 @@ const actions = {
     }
 
     if (getters.currentTimer) {
-      await timersApi.endTimer()
+      try {
+        await timersApi.endTimer()
+      } catch (error) {
+        if (!isTimerTooShortError(error)) {
+          throw error
+        }
+      }
     }
 
     await timersApi.startTimer(taskId)
@@ -69,7 +118,13 @@ const actions = {
   },
 
   async endTimer({ dispatch, state }) {
-    await timersApi.endTimer()
+    try {
+      await timersApi.endTimer()
+    } catch (error) {
+      if (!isTimerTooShortError(error)) {
+        throw error
+      }
+    }
     return dispatch('loadTimers', state.currentQuery)
   },
 
@@ -91,7 +146,10 @@ const actions = {
 
 const mutations = {
   [LOAD_TIMERS_END](state, { timers, query }) {
-    state.timers = timers
+    state.timers = timers.map(timer => ({
+      ...timer,
+      task: normalizeEmbeddedTask(timer.task)
+    }))
     state.currentQuery = query || { ...initialState.currentQuery }
   },
 

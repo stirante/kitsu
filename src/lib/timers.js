@@ -1,15 +1,28 @@
 import moment from 'moment-timezone'
 
 const sameTaskId = (left, right) => String(left) === String(right)
+const getTimerStartMoment = timer => moment.utc(timer.start_time)
+
+const getTimerDayBounds = (date, timezone) => {
+  const dayStart = moment.tz(date, 'YYYY-MM-DD', timezone).utc()
+  return {
+    dayStart,
+    dayEnd: dayStart.clone().add(1, 'day')
+  }
+}
 
 export const getTimerEndMoment = (timer, now = moment.utc()) => {
-  return timer.end_time ? moment.utc(timer.end_time) : now.clone()
+  if (timer.end_time) {
+    return moment.utc(timer.end_time)
+  }
+
+  return moment.max(now.clone(), getTimerStartMoment(timer))
 }
 
 export const getTimerDurationMinutes = (timer, now = moment.utc()) => {
   return Math.max(
     0,
-    getTimerEndMoment(timer, now).diff(moment.utc(timer.start_time), 'minutes')
+    getTimerEndMoment(timer, now).diff(getTimerStartMoment(timer), 'minutes')
   )
 }
 
@@ -23,14 +36,36 @@ export const getTimerDateOverlapMinutes = (
     return getTimerDurationMinutes(timer, now)
   }
 
-  const dayStart = moment.tz(date, 'YYYY-MM-DD', timezone).utc()
-  const dayEnd = dayStart.clone().add(1, 'day')
-  const start = moment.utc(timer.start_time)
+  const { dayStart, dayEnd } = getTimerDayBounds(date, timezone)
+  const start = getTimerStartMoment(timer)
   const end = getTimerEndMoment(timer, now)
   const overlapStart = moment.max(start, dayStart)
   const overlapEnd = moment.min(end, dayEnd)
 
   return Math.max(0, overlapEnd.diff(overlapStart, 'minutes'))
+}
+
+export const isTimerVisibleForDate = (
+  timer,
+  date,
+  timezone,
+  now = moment.utc()
+) => {
+  if (!date || !timezone) {
+    return true
+  }
+
+  const { dayStart, dayEnd } = getTimerDayBounds(date, timezone)
+  const start = getTimerStartMoment(timer)
+  const end = getTimerEndMoment(timer, now)
+  const overlapStart = moment.max(start, dayStart)
+  const overlapEnd = moment.min(end, dayEnd)
+
+  if (overlapEnd.isAfter(overlapStart)) {
+    return true
+  }
+
+  return !timer.end_time && start.isBetween(dayStart, dayEnd, undefined, '[)')
 }
 
 export const getTaskTrackedMinutesForDate = ({

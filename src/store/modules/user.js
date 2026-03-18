@@ -282,10 +282,15 @@ const actions = {
       commit(USER_LOAD_TODOS_START)
       try {
         const tasks = await peopleApi.loadTodos()
-        const timeSpents = await peopleApi.loadTimeSpents(date)
         commit(USER_LOAD_TODOS_END, { tasks, userFilters, taskTypeMap })
         commit(REGISTER_USER_TASKS, { tasks })
-        commit(USER_LOAD_TIME_SPENTS_END, timeSpents)
+        try {
+          const timeSpents = await peopleApi.loadTimeSpents(date)
+          commit(USER_LOAD_TIME_SPENTS_END, timeSpents)
+        } catch (err) {
+          console.error(err)
+          commit(USER_LOAD_TIME_SPENTS_END, [])
+        }
         return tasks
       } catch (err) {
         console.error(err)
@@ -587,6 +592,7 @@ const mutations = {
 
   [USER_LOAD_TODOS_ERROR](state, tasks) {
     state.isTodosLoadingError = true
+    state.isTodosLoading = false
   },
 
   [CHANGE_AVATAR_FILE](state, formData) {

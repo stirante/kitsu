@@ -80,7 +80,7 @@
             <task-type-cell
               class="type datatable-row-header datatable-row-header--nobd"
               :production-id="task.project_id"
-              :task-type="taskTypeMap.get(task.task_type_id)"
+              :task-type="taskTypeForTask(task)"
               :style="{ left: colTypePosX }"
             />
 
@@ -219,7 +219,7 @@ import moment from 'moment-timezone'
 import { mapGetters } from 'vuex'
 
 import { PAGE_SIZE } from '@/lib/pagination'
-import { formatSimpleDateUTC } from '@/lib/time'
+import { formatSimpleDateUTC, getCurrentDateForTimezone } from '@/lib/time'
 import { isSameTaskId } from '@/lib/timers'
 
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
@@ -320,13 +320,14 @@ export default {
   ],
 
   data() {
-    const today = new Date()
     return {
       colNamePosX: '',
       colTypePosX: '',
       disabledDates: {},
       page: 1,
-      selectedDate: today,
+      selectedDate: getCurrentDateForTimezone(
+        this.user?.timezone || moment.tz.guess() || 'UTC'
+      ),
       modals: {
         setDayOff: false,
         unsetDayOff: false
@@ -339,13 +340,7 @@ export default {
     this.colNamePosX = `${
       this.$refs['th-prod'].offsetWidth + this.$refs['th-type'].offsetWidth
     }px`
-    this.disabledDates = {
-      to:
-        this.isCurrentUserArtist && this.organisation.timesheets_locked
-          ? moment().subtract(1, 'weeks').toDate() // Disable dates older than one week
-          : undefined,
-      from: moment().toDate() // Disable dates after today
-    }
+    this.updateDisabledDates()
   },
 
   computed: {
@@ -356,6 +351,10 @@ export default {
       'taskTypeMap',
       'user'
     ]),
+
+    effectiveTimezone() {
+      return this.user?.timezone || moment.tz.guess() || 'UTC'
+    },
 
     personDayOff() {
       const selectedDate = formatSimpleDateUTC(this.selectedDate)
@@ -486,6 +485,33 @@ export default {
       return route
     },
 
+    updateDisabledDates() {
+      const today = getCurrentDateForTimezone(this.effectiveTimezone)
+      this.disabledDates = {
+        to:
+          this.isCurrentUserArtist && this.organisation.timesheets_locked
+            ? moment(today).subtract(1, 'weeks').toDate() // Disable dates older than one week
+            : undefined,
+        from: today // Disable dates after today
+      }
+    },
+
+    taskTypeForTask(task) {
+      const taskType = this.taskTypeMap.get(task.task_type_id)
+      if (taskType) return taskType
+      return {
+        id: task.task_type_id,
+        name: task.task_type_name,
+        color: task.task_type_color,
+        for_entity: task.task_type_for_entity
+          ? task.task_type_for_entity
+          : ['Shot', 'Edit'].includes(task.entity_type_name)
+            ? task.entity_type_name
+            : 'Asset',
+        episode_id: task.episode_id || undefined
+      }
+    },
+
     toggleDayOff() {
       if (this.personIsDayOff) {
         this.modals.unsetDayOff = true
@@ -504,6 +530,17 @@ export default {
   },
 
   watch: {
+    user: {
+      handler(newUser, oldUser) {
+        if (newUser?.timezone && !oldUser?.timezone) {
+          if (!this.selectedDate) {
+            this.selectedDate = getCurrentDateForTimezone(newUser.timezone)
+          }
+          this.updateDisabledDates()
+        }
+      },
+      immediate: true
+    },
     selectedDate() {
       this.$emit('date-changed', this.selectedDate)
     }
