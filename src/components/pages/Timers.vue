@@ -144,6 +144,9 @@
                   </td>
                   <td class="end-cell" style="text-align: right">
                     <template v-if="canStopTimer(timer)">
+                      <span class="live-timer">
+                        {{ liveTimerText(timer) }}
+                      </span>
                       <button-simple
                         class="icon-button"
                         :title="$t('timers.stop')"
@@ -446,7 +449,25 @@ export default {
     startTick() {
       this.tickInterval = setInterval(() => {
         this.tick++
-      }, 60000)
+      }, 1000)
+    },
+
+    formatLiveSeconds(totalSeconds) {
+      const seconds = Math.max(0, Math.floor(totalSeconds))
+      const hours = Math.floor(seconds / 3600)
+      const minutes = Math.floor((seconds % 3600) / 60)
+      const remainingSeconds = seconds % 60
+      const paddedMinutes = String(minutes).padStart(2, '0')
+      const paddedSeconds = String(remainingSeconds).padStart(2, '0')
+      return `${hours}:${paddedMinutes}:${paddedSeconds}`
+    },
+
+    liveTimerText(timer) {
+      if (timer.end_time) return ''
+      this.tick
+      const start = moment.utc(timer.start_time)
+      const now = moment.utc()
+      return this.formatLiveSeconds(now.diff(start, 'seconds'))
     },
 
     updateStart(timer) {
@@ -518,6 +539,15 @@ export default {
 .start-button {
   background: #008c00;
   margin-bottom: 0.5em;
+}
+
+.live-timer {
+  font-size: 0.85em;
+  margin-right: 0.5rem;
+  opacity: 0.8;
+  vertical-align: middle;
+  white-space: nowrap;
+  line-height: 3.3em;
 }
 
 .discard-button {

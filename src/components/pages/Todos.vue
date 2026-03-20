@@ -114,6 +114,7 @@
           :time-spent-map="timeSpentMap"
           :time-spent-total="timeSpentTotal"
           :active-timer-task-id="currentTimer?.task_id || ''"
+          :active-timer="currentTimer"
           :display-duration-for-task="displayDurationForTask"
           :manual-duration-for-task="manualDurationForTask"
           :hide-done="loggableDoneTasks.length === 0"

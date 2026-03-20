@@ -107,6 +107,7 @@
               :display-duration="displayDuration(task.id)"
               :is-timer-running="isTimerRunning(task.id)"
               :show-timer-controls="showTimerControls"
+              :live-duration="liveDurationForTask(task.id)"
               :task-id="task.id"
               @change="onSliderChange"
               @start-timer="$emit('start-timer', task)"
@@ -166,6 +167,7 @@
               :display-duration="displayDuration(task.id)"
               :is-timer-running="isTimerRunning(task.id)"
               :show-timer-controls="showTimerControls"
+              :live-duration="liveDurationForTask(task.id)"
               :task-id="task.id"
               @change="onSliderChange"
               @start-timer="$emit('start-timer', task)"
@@ -296,6 +298,10 @@ export default {
       default: '',
       type: String
     },
+    activeTimer: {
+      default: null,
+      type: Object
+    },
     displayDurationForTask: {
       default: null,
       type: Function
@@ -325,6 +331,7 @@ export default {
       colTypePosX: '',
       disabledDates: {},
       page: 1,
+      tick: 0,
       selectedDate: getCurrentDateForTimezone(
         this.user?.timezone || moment.tz.guess() || 'UTC'
       ),
@@ -341,6 +348,14 @@ export default {
       this.$refs['th-prod'].offsetWidth + this.$refs['th-type'].offsetWidth
     }px`
     this.updateDisabledDates()
+    this.startTick()
+  },
+
+  beforeUnmount() {
+    if (this.tickInterval) {
+      clearInterval(this.tickInterval)
+      this.tickInterval = null
+    }
   },
 
   computed: {
@@ -510,6 +525,33 @@ export default {
             : 'Asset',
         episode_id: task.episode_id || undefined
       }
+    },
+
+    startTick() {
+      if (this.tickInterval) return
+      this.tickInterval = setInterval(() => {
+        this.tick += 1
+      }, 1000)
+    },
+
+    formatLiveSeconds(totalSeconds) {
+      const seconds = Math.max(0, Math.floor(totalSeconds))
+      const hours = Math.floor(seconds / 3600)
+      const minutes = Math.floor((seconds % 3600) / 60)
+      const remainingSeconds = seconds % 60
+      const paddedMinutes = String(minutes).padStart(2, '0')
+      const paddedSeconds = String(remainingSeconds).padStart(2, '0')
+      return `${hours}:${paddedMinutes}:${paddedSeconds}`
+    },
+
+    liveDurationForTask(taskId) {
+      if (!this.isTimerRunning(taskId) || !this.activeTimer?.start_time) {
+        return ''
+      }
+      this.tick
+      const start = moment.utc(this.activeTimer.start_time)
+      const now = moment.utc()
+      return this.formatLiveSeconds(now.diff(start, 'seconds'))
     },
 
     toggleDayOff() {

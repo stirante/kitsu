@@ -27,6 +27,9 @@
         :icon="isTimerRunning ? 'stop' : 'play'"
         @click="toggleTimer"
       />
+      <span v-if="liveDuration" class="timer-live">
+        {{ liveDuration }}
+      </span>
       <button class="button flexrow-item" @click="setValue(1)">1</button>
       <button class="button flexrow-item" @click="setValue(4)">4</button>
       <button class="button flexrow-item" @click="setValue(hoursByDay)">
@@ -96,6 +99,10 @@ export default {
     showTimerControls: {
       type: Boolean,
       default: false
+    },
+    liveDuration: {
+      type: String,
+      default: ''
     }
   },
 
@@ -183,5 +190,13 @@ export default {
 
 .timer-button {
   margin-left: 0.5rem;
+  margin-right: 0.5rem;
+}
+
+.timer-live {
+  font-size: 0.85em;
+  margin-right: 0.35rem;
+  opacity: 0.8;
+  white-space: nowrap;
 }
 </style>

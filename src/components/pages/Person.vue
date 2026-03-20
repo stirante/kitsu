@@ -116,6 +116,7 @@
             :active-timer-task-id="
               user.id === person.id ? currentTimer?.task_id || '' : ''
             "
+            :active-timer="user.id === person.id ? currentTimer : null"
             :display-duration-for-task="displayDurationForTask"
             :manual-duration-for-task="manualDurationForTask"
             :hide-done="false"
