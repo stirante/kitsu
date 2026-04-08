@@ -7,7 +7,9 @@ import {
   formatDate,
   formatFullDate,
   formatSimpleDate,
-  minutesToDays
+  minutesToDays,
+  minutesToHours,
+  roundToPrecision
 } from '@/lib/time'
 
 export const formatListMixin = {
@@ -34,7 +36,7 @@ export const formatListMixin = {
       }
 
       const duration = this.organisation.format_duration_in_hours
-        ? minutes / 60
+        ? minutesToHours(minutes)
         : minutesToDays(this.organisation, minutes)
 
       if (toLocale) {
@@ -42,7 +44,7 @@ export const formatListMixin = {
           maximumFractionDigits: 2
         })
       }
-      return Math.round(duration * 100) / 100 // Round to 2 decimal places
+      return roundToPrecision(duration)
     },
 
     formatPriority(priority) {

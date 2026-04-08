@@ -183,7 +183,9 @@ import {
   getWeekRange,
   getDayRange,
   hoursToDays,
+  minutesToHours,
   monthToString,
+  roundToPrecision,
   range
 } from '@/lib/time'
 
@@ -286,7 +288,7 @@ export default {
       const duration = this.getDuration(yearString, personId)
       return this.isHours
         ? duration
-        : hoursToDays(this.organisation, duration).toFixed(2)
+        : roundToPrecision(hoursToDays(this.organisation, duration)).toFixed(2)
     },
 
     monthDuration(month, personId) {
@@ -294,14 +296,14 @@ export default {
       const duration = this.getDuration(monthString, personId)
       return this.isHours
         ? duration
-        : hoursToDays(this.organisation, duration).toFixed(2)
+        : roundToPrecision(hoursToDays(this.organisation, duration)).toFixed(2)
     },
 
     weekDuration(week, personId) {
       const duration = this.getDuration(week, personId)
       return this.isHours
         ? duration
-        : hoursToDays(this.organisation, duration).toFixed(2)
+        : roundToPrecision(hoursToDays(this.organisation, duration)).toFixed(2)
     },
 
     dayDuration(day, personId) {
@@ -311,7 +313,9 @@ export default {
         const duration = this.getDuration(day, personId)
         return this.isHours
           ? duration
-          : hoursToDays(this.organisation, duration).toFixed(2)
+          : roundToPrecision(hoursToDays(this.organisation, duration)).toFixed(
+              2
+            )
       }
     },
 
@@ -321,7 +325,7 @@ export default {
         this.timesheet[index] &&
         this.timesheet[index][personId]
       ) {
-        return this.timesheet[index][personId] / 60
+        return minutesToHours(this.timesheet[index][personId], 2)
       } else {
         return '-'
       }

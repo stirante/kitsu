@@ -13,7 +13,7 @@
       </div>
       <div class="flexrow-item flexrow time-spent-total">
         -&nbsp;&nbsp;
-        {{ formattedTimeSpentTotal }} {{ $t('timesheets.hours') }}
+        {{ formattedTimeSpentTotal }} {{ durationUnitLabel }}
       </div>
       <div class="filler"></div>
       <button-simple
@@ -58,7 +58,7 @@
               {{ $t('tasks.fields.entity') }}
             </th>
             <th scope="col" class="time-spent datatable-row-header">
-              {{ $t('timesheets.time_spents') }}
+              {{ timeSpentHeaderLabel }}
             </th>
           </tr>
         </thead>
@@ -221,7 +221,11 @@ import moment from 'moment-timezone'
 import { mapGetters } from 'vuex'
 
 import { PAGE_SIZE } from '@/lib/pagination'
-import { formatSimpleDateUTC, getCurrentDateForTimezone } from '@/lib/time'
+import {
+  formatSimpleDateUTC,
+  getCurrentDateForTimezone,
+  minutesToHours
+} from '@/lib/time'
 import { isSameTaskId } from '@/lib/timers'
 
 import ButtonSimple from '@/components/widgets/ButtonSimple.vue'
@@ -429,6 +433,18 @@ export default {
         (sum, taskId) => sum + this.displayDuration(taskId),
         0
       )
+    },
+
+    durationUnitLabel() {
+      return this.isDurationInHours
+        ? this.$t('timesheets.hours')
+        : this.$tc('main.days', 2)
+    },
+
+    timeSpentHeaderLabel() {
+      return this.isDurationInHours
+        ? this.$t('timesheets.time_spents')
+        : this.$t('timesheets.time_spents').replace('(hours)', '(days)')
     }
   },
 
@@ -457,7 +473,7 @@ export default {
       }
 
       return this.timeSpentMap[taskId]
-        ? this.timeSpentMap[taskId].duration / 60
+        ? minutesToHours(this.timeSpentMap[taskId].duration, 2)
         : 0
     },
 

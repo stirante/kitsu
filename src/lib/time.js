@@ -305,6 +305,21 @@ export const daysToMinutes = (organisation, days = 0) => {
   return Math.floor(days * organisation.hours_by_day * 60)
 }
 
+export const roundToPrecision = (value = 0, precision = 2) => {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) {
+    return 0
+  }
+
+  const factor = 10 ** precision
+  return Math.round((numericValue + Number.EPSILON) * factor) / factor
+}
+
+export const minutesToHours = (minutes = 0, precision = null) => {
+  const hours = Number(minutes || 0) / 60
+  return precision === null ? hours : roundToPrecision(hours, precision)
+}
+
 export const minutesToDays = (organisation, minutes = 0) => {
   return minutes / 60 / organisation.hours_by_day
 }

@@ -1,8 +1,12 @@
 <template>
-  <div class="columns fixed-page">
-    <div class="column main-column">
-      <div class="timers page">
-        <div class="page-header flexrow">
+  <div
+    :class="['timers-layout', { columns: !embedded, 'fixed-page': !embedded }]"
+  >
+    <div :class="['main-column', { column: !embedded }]">
+      <div
+        :class="['timers', { page: !embedded, 'timers--embedded': embedded }]"
+      >
+        <div class="page-header flexrow" v-if="!embedded">
           <page-title class="flexrow-item title" :text="$t('timers.title')" />
         </div>
         <div class="flexrow">
@@ -30,7 +34,7 @@
           </div>
           <div class="flexrow-item flexrow time-spent-total">
             -&nbsp;&nbsp;
-            {{ formatDuration(totalDuration) }} {{ $t('timesheets.hours') }}
+            {{ formatDuration(totalDuration) }} {{ durationUnitLabel }}
           </div>
         </div>
         <div class="has-text-centered" v-if="isLoading">
@@ -134,13 +138,13 @@
                   </td>
                   <td>
                     {{ formatDuration(timerDuration(timer)) }}
-                    {{ $t('timesheets.hours') }}
+                    {{ durationUnitLabel }}
                   </td>
                   <td>
                     {{
                       formatDuration(taskDurationWithRunning(timer.task_id))
                     }}/{{ formatDuration(taskEstimation(timer)) }}
-                    {{ $t('timesheets.hours') }}
+                    {{ durationUnitLabel }}
                   </td>
                   <td class="end-cell" style="text-align: right">
                     <template v-if="canStopTimer(timer)">
@@ -197,6 +201,13 @@ import EntityThumbnail from '@/components/widgets/EntityThumbnail.vue'
 export default {
   name: 'timers',
 
+  props: {
+    embedded: {
+      type: Boolean,
+      default: false
+    }
+  },
+
   mixins: [formatListMixin, timeMixin],
 
   components: {
@@ -226,16 +237,16 @@ export default {
       'isCurrentUserAdmin',
       'currentTimer',
       'displayedTodos',
+      'manualTimeSpentMap',
       'productionMap',
       'taskTypeMap',
-      'timeSpentMap',
       'timers',
       'timersForDate'
     ]),
 
     taskOptions() {
       return this.displayedTodos.map(task => ({
-        label: task.full_entity_name,
+        label: this.taskOptionLabel(task),
         value: task.id
       }))
     },
@@ -278,6 +289,12 @@ export default {
         timezone: this.timezone,
         now: moment.utc()
       })
+    },
+
+    durationUnitLabel() {
+      return this.isDurationInHours
+        ? this.$t('timesheets.hours')
+        : this.$tc('main.days', 2)
     }
   },
 
@@ -343,6 +360,14 @@ export default {
       return task ? task.full_entity_name : id
     },
 
+    taskOptionLabel(task) {
+      const productionName =
+        task.project_name || this.productionMap.get(task.project_id)?.name
+      return [productionName, task.full_entity_name, task.task_type_name]
+        .filter(Boolean)
+        .join(' / ')
+    },
+
     timerDuration(timer) {
       // Referencing the tick variable here is a hack to make Vue recompute this
       this.tick
@@ -355,7 +380,7 @@ export default {
     },
 
     taskDurationWithRunning(taskId) {
-      const manualDuration = this.timeSpentMap[taskId]?.duration || 0
+      const manualDuration = this.manualTimeSpentMap[taskId]?.duration || 0
       const timerDuration = this.trackedMinutesByTask[String(taskId)] || 0
       return manualDuration + timerDuration
     },
@@ -510,6 +535,10 @@ export default {
   },
 
   head() {
+    if (this.embedded) {
+      return {}
+    }
+
     return {
       title: `${this.$t('timers.title')} - Kitsu`
     }
@@ -520,6 +549,11 @@ export default {
 <style lang="scss" scoped>
 .timers {
   padding-bottom: 1em;
+}
+
+.timers--embedded {
+  padding-top: 0;
+  height: auto;
 }
 
 .page-header {

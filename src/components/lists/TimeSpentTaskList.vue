@@ -55,7 +55,7 @@ import { firstBy } from 'thenby'
 
 import { getTaskPath } from '@/lib/path'
 import { sortByName } from '@/lib/sorting'
-import { hoursToDays } from '@/lib/time'
+import { hoursToDays, minutesToHours, roundToPrecision } from '@/lib/time'
 
 import ProductionName from '@/components/widgets/ProductionName.vue'
 import TableInfo from '@/components/widgets/TableInfo.vue'
@@ -143,10 +143,10 @@ export default {
 
   methods: {
     getDuration(task) {
-      const duration = task.duration / 60
+      const duration = minutesToHours(task.duration, 2)
       return this.isHours
         ? duration
-        : hoursToDays(this.organisation, duration).toFixed(2)
+        : roundToPrecision(hoursToDays(this.organisation, duration)).toFixed(2)
     },
 
     getTaskPath(task) {

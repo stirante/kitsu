@@ -25,7 +25,7 @@
         class="flexrow-item icon-button timer-button"
         :title="$t(isTimerRunning ? 'timers.stop' : 'timers.start')"
         :icon="isTimerRunning ? 'stop' : 'play'"
-        @click="toggleTimer"
+        @click.stop.prevent="toggleTimer"
       />
       <span v-if="liveDuration" class="timer-live">
         {{ liveDuration }}

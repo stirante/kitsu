@@ -28,6 +28,7 @@
     <download-icon class="icon" v-else-if="icon === 'download'" />
     <film-icon class="icon" v-else-if="icon === 'film'" />
     <pause-icon class="icon" v-else-if="icon === 'pause'" />
+    <square-icon class="icon" v-else-if="icon === 'stop'" />
     <edit-icon class="icon" v-else-if="icon === 'edit'" />
     <image-icon class="icon" v-else-if="icon === 'image'" />
     <maximize-icon class="icon" v-else-if="icon === 'maximize'" />

@@ -7,7 +7,9 @@ import {
   getDayRange,
   getMonthRange,
   getWeekRange,
-  hoursToDays
+  hoursToDays,
+  minutesToHours,
+  roundToPrecision
 } from '@/lib/time'
 
 const csv = {
@@ -91,8 +93,10 @@ const csv = {
         headers.forEach((h, index) => {
           if (index > 0) {
             if (timesheet[h] && timesheet[h][person.id]) {
-              let value = timesheet[h][person.id] / 60
-              if (unit !== 'hour') value = hoursToDays(organisation, value)
+              let value = minutesToHours(timesheet[h][person.id], 2)
+              if (unit !== 'hour') {
+                value = roundToPrecision(hoursToDays(organisation, value))
+              }
               line.push(value)
             } else {
               line.push('-')
@@ -103,8 +107,10 @@ const csv = {
         headers.forEach((h, index) => {
           if (index > 0) {
             if (timesheet && timesheet[index] && timesheet[index][person.id]) {
-              let value = timesheet[index][person.id] / 60
-              if (unit !== 'hour') value = hoursToDays(organisation, value)
+              let value = minutesToHours(timesheet[index][person.id], 2)
+              if (unit !== 'hour') {
+                value = roundToPrecision(hoursToDays(organisation, value))
+              }
               line.push(value)
             } else {
               line.push('-')

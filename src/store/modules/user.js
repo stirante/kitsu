@@ -2,6 +2,7 @@ import peopleApi from '@/store/api/people'
 import peopleStore from '@/store/modules/people'
 import taskStatusStore from '@/store/modules/taskstatus'
 import auth from '@/lib/auth'
+import { minutesToHours } from '@/lib/time'
 import { sortTasks, sortByName } from '@/lib/sorting'
 import { indexSearch, buildTaskIndex } from '@/lib/indexing'
 import { getKeyWords } from '@/lib/filtering'
@@ -81,6 +82,33 @@ import {
 const helpers = {
   getTaskStatus(taskStatusId) {
     return taskStatusStore.cache.taskStatusMap.get(taskStatusId)
+  },
+
+  buildTimeSpentMap(timeSpents = [], { manualOnly = false } = {}) {
+    return timeSpents.reduce((timeSpentMap, timeSpent) => {
+      if (manualOnly && timeSpent.timer_id) {
+        return timeSpentMap
+      }
+
+      const taskId = timeSpent.task_id
+      const currentDuration = timeSpentMap[taskId]?.duration || 0
+      timeSpentMap[taskId] = {
+        ...timeSpentMap[taskId],
+        ...timeSpent,
+        duration: currentDuration + Number(timeSpent.duration || 0)
+      }
+      return timeSpentMap
+    }, {})
+  },
+
+  getTimeSpentTotalHours(timeSpentMap = {}) {
+    return minutesToHours(
+      Object.values(timeSpentMap).reduce(
+        (acc, timeSpent) => Number(timeSpent.duration || 0) + acc,
+        0
+      ),
+      2
+    )
   }
 }
 
@@ -121,6 +149,8 @@ const initialState = {
 
   timeSpentMap: {},
   timeSpentTotal: 0,
+  manualTimeSpentMap: {},
+  manualTimeSpentTotal: 0,
 
   plugins: []
 }
@@ -162,6 +192,8 @@ const getters = {
 
   timeSpentMap: state => state.timeSpentMap,
   timeSpentTotal: state => state.timeSpentTotal,
+  manualTimeSpentMap: state => state.manualTimeSpentMap,
+  manualTimeSpentTotal: state => state.manualTimeSpentTotal,
 
   plugins: state => state.plugins,
   studioPlugins: state =>
@@ -553,6 +585,8 @@ const mutations = {
     state.isTodosLoading = true
     state.timeSpents = {}
     state.timeSpentTotal = 0
+    state.manualTimeSpentMap = {}
+    state.manualTimeSpentTotal = 0
   },
 
   [USER_LOAD_TODOS_END](state, { tasks, userFilters, taskTypeMap }) {
@@ -733,31 +767,50 @@ const mutations = {
 
   [SET_TIME_SPENT](state, timeSpent) {
     if (state.user.id === timeSpent.person_id) {
-      if (timeSpent.duration > 0) {
-        state.timeSpentMap[timeSpent.task_id] = timeSpent
+      const taskId = timeSpent.task_id
+      const previousManualDuration =
+        state.manualTimeSpentMap[taskId]?.duration || 0
+      const totalDuration = state.timeSpentMap[taskId]?.duration || 0
+      const timerDuration = Math.max(0, totalDuration - previousManualDuration)
+
+      if (!timeSpent.timer_id && timeSpent.duration > 0) {
+        state.manualTimeSpentMap[taskId] = {
+          ...timeSpent,
+          duration: Number(timeSpent.duration || 0)
+        }
       } else {
-        delete state.timeSpentMap[timeSpent.task_id]
+        delete state.manualTimeSpentMap[taskId]
+      }
+
+      const manualDuration = state.manualTimeSpentMap[taskId]?.duration || 0
+      const nextTotalDuration = timerDuration + manualDuration
+
+      if (nextTotalDuration > 0) {
+        state.timeSpentMap[taskId] = {
+          ...(state.timeSpentMap[taskId] || {}),
+          ...timeSpent,
+          duration: nextTotalDuration
+        }
+      } else {
+        delete state.timeSpentMap[taskId]
       }
     }
-    state.timeSpentTotal =
-      Object.values(state.timeSpentMap).reduce(
-        (acc, timeSpent) => timeSpent.duration + acc,
-        0
-      ) / 60
+    state.timeSpentTotal = helpers.getTimeSpentTotalHours(state.timeSpentMap)
+    state.manualTimeSpentTotal = helpers.getTimeSpentTotalHours(
+      state.manualTimeSpentMap
+    )
   },
 
   [USER_LOAD_TIME_SPENTS_END](state, timeSpents) {
-    const timeSpentMap = {}
-    timeSpents.forEach(timeSpent => {
-      timeSpentMap[timeSpent.task_id] = timeSpent
+    state.timeSpentMap = helpers.buildTimeSpentMap(timeSpents)
+    state.manualTimeSpentMap = helpers.buildTimeSpentMap(timeSpents, {
+      manualOnly: true
     })
-    state.timeSpentMap = timeSpentMap
 
-    state.timeSpentTotal =
-      Object.values(state.timeSpentMap).reduce(
-        (acc, timeSpent) => timeSpent.duration + acc,
-        0
-      ) / 60
+    state.timeSpentTotal = helpers.getTimeSpentTotalHours(state.timeSpentMap)
+    state.manualTimeSpentTotal = helpers.getTimeSpentTotalHours(
+      state.manualTimeSpentMap
+    )
   },
 
   [SAVE_ASSET_SEARCH_END](state, { searchQuery, production }) {

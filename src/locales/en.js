@@ -1813,7 +1813,7 @@ export default {
     hookup_playlist: 'Generate a hook-up playlist',
     late: 'Late status',
     my_checks: 'My Checks',
-    my_tasks: 'My Tasks',
+    my_tasks: 'Time Tracking',
     nb_selected_tasks: '{nbSelectedTasks} task selected | {nbSelectedTasks} tasks selected',
     new_revision_number: 'New revision number',
     next: 'next task',

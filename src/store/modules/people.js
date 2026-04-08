@@ -1,5 +1,6 @@
 import peopleApi from '@/store/api/people'
 import colors from '@/lib/colors'
+import { minutesToHours } from '@/lib/time'
 import { clearSelectionGrid } from '@/lib/selection'
 import { populateTask } from '@/lib/models'
 import { sortTasks, sortPeople, sortByName } from '@/lib/sorting'
@@ -91,6 +92,33 @@ const helpers = {
     return taskStatusStore.cache.taskStatusMap.get(taskStatusId)
   },
 
+  buildTimeSpentMap(timeSpents = [], { manualOnly = false } = {}) {
+    return timeSpents.reduce((timeSpentMap, timeSpent) => {
+      if (manualOnly && timeSpent.timer_id) {
+        return timeSpentMap
+      }
+
+      const taskId = timeSpent.task_id
+      const currentDuration = timeSpentMap[taskId]?.duration || 0
+      timeSpentMap[taskId] = {
+        ...timeSpentMap[taskId],
+        ...timeSpent,
+        duration: currentDuration + Number(timeSpent.duration || 0)
+      }
+      return timeSpentMap
+    }, {})
+  },
+
+  getTimeSpentTotalHours(timeSpentMap = {}) {
+    return minutesToHours(
+      Object.values(timeSpentMap).reduce(
+        (acc, timeSpent) => Number(timeSpent.duration || 0) + acc,
+        0
+      ),
+      2
+    )
+  },
+
   buildResult(state, { peopleSearch, departments, persons }) {
     const query = peopleSearch
     const keywords = getKeyWords(query) || []
@@ -164,6 +192,8 @@ const initialState = {
   timesheet: {},
   personTimeSpentMap: {},
   personTimeSpentTotal: 0,
+  personManualTimeSpentMap: {},
+  personManualTimeSpentTotal: 0,
   personDayOff: {},
   daysOff: [],
   dayOffMap: {}
@@ -214,6 +244,8 @@ const getters = {
   timesheet: state => state.timesheet,
   personTimeSpentMap: state => state.personTimeSpentMap,
   personTimeSpentTotal: state => state.personTimeSpentTotal,
+  personManualTimeSpentMap: state => state.personManualTimeSpentMap,
+  personManualTimeSpentTotal: state => state.personManualTimeSpentTotal,
   dayOffMap: state => state.dayOffMap,
   daysOff: state => state.daysOff
 }
@@ -834,31 +866,55 @@ const mutations = {
 
   [SET_TIME_SPENT](state, timeSpent) {
     if (state.person.id === timeSpent.person_id) {
-      if (timeSpent.duration > 0) {
-        state.personTimeSpentMap[timeSpent.task_id] = timeSpent
+      const taskId = timeSpent.task_id
+      const previousManualDuration =
+        state.personManualTimeSpentMap[taskId]?.duration || 0
+      const totalDuration = state.personTimeSpentMap[taskId]?.duration || 0
+      const timerDuration = Math.max(0, totalDuration - previousManualDuration)
+
+      if (!timeSpent.timer_id && timeSpent.duration > 0) {
+        state.personManualTimeSpentMap[taskId] = {
+          ...timeSpent,
+          duration: Number(timeSpent.duration || 0)
+        }
       } else {
-        delete state.personTimeSpentMap[timeSpent.task_id]
+        delete state.personManualTimeSpentMap[taskId]
+      }
+
+      const manualDuration =
+        state.personManualTimeSpentMap[taskId]?.duration || 0
+      const nextTotalDuration = timerDuration + manualDuration
+
+      if (nextTotalDuration > 0) {
+        state.personTimeSpentMap[taskId] = {
+          ...(state.personTimeSpentMap[taskId] || {}),
+          ...timeSpent,
+          duration: nextTotalDuration
+        }
+      } else {
+        delete state.personTimeSpentMap[taskId]
       }
     }
-    state.personTimeSpentTotal =
-      Object.values(state.personTimeSpentMap).reduce(
-        (acc, timeSpent) => timeSpent.duration + acc,
-        0
-      ) / 60
+    state.personTimeSpentTotal = helpers.getTimeSpentTotalHours(
+      state.personTimeSpentMap
+    )
+    state.personManualTimeSpentTotal = helpers.getTimeSpentTotalHours(
+      state.personManualTimeSpentMap
+    )
   },
 
   [PERSON_LOAD_TIME_SPENTS_END](state, timeSpents) {
-    const timeSpentMap = {}
-    timeSpents.forEach(timeSpent => {
-      timeSpentMap[timeSpent.task_id] = timeSpent
+    state.personTimeSpentMap = helpers.buildTimeSpentMap(timeSpents)
+    state.personManualTimeSpentMap = helpers.buildTimeSpentMap(timeSpents, {
+      manualOnly: true
     })
-    state.personTimeSpentMap = timeSpentMap
 
-    state.personTimeSpentTotal =
-      Object.values(state.personTimeSpentMap).reduce(
-        (acc, timeSpent) => timeSpent.duration + acc,
-        0
-      ) / 60
+    state.personTimeSpentTotal = helpers.getTimeSpentTotalHours(
+      state.personTimeSpentMap
+    )
+    state.personManualTimeSpentTotal = helpers.getTimeSpentTotalHours(
+      state.personManualTimeSpentMap
+    )
   },
 
   [PEOPLE_SET_DAYS_OFF](state, daysOff) {

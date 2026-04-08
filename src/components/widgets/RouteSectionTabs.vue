@@ -37,13 +37,21 @@ export default {
 
   methods: {
     getRoute(tab) {
-      return {
-        ...this.route,
+      const nextRoute = {
         query: {
           ...this.route.query,
           section: tab.name || tab.value
         }
       }
+
+      if (this.route.name) {
+        nextRoute.name = this.route.name
+        nextRoute.params = this.route.params
+      } else {
+        nextRoute.path = this.route.path
+      }
+
+      return nextRoute
     }
   }
 }

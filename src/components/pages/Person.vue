@@ -111,8 +111,16 @@
             :is-error="isTasksLoadingError"
             :days-off="daysOff"
             :day-off-error="dayOffError"
-            :time-spent-map="personTimeSpentMap"
-            :time-spent-total="personTimeSpentTotal"
+            :time-spent-map="
+              user.id === person.id
+                ? personManualTimeSpentMap
+                : personTimeSpentMap
+            "
+            :time-spent-total="
+              user.id === person.id
+                ? personManualTimeSpentTotal
+                : personTimeSpentTotal
+            "
             :active-timer-task-id="
               user.id === person.id ? currentTimer?.task_id || '' : ''
             "
@@ -174,6 +182,7 @@ import {
   formatSimpleDateUTC,
   getFirstStartDate,
   getLastEndDate,
+  minutesToHours,
   minutesToDays,
   parseDate
 } from '@/lib/time'
@@ -290,6 +299,8 @@ export default {
       'personTasksScrollPosition',
       'personTaskSearchQueries',
       'personTaskSelectionGrid',
+      'personManualTimeSpentMap',
+      'personManualTimeSpentTotal',
       'personTimeSpentMap',
       'personTimeSpentTotal',
       'timers',
@@ -805,19 +816,25 @@ export default {
     },
 
     manualDurationForTask(taskId) {
-      return (this.personTimeSpentMap[taskId]?.duration || 0) / 60
+      if (this.user.id !== this.person.id) {
+        return minutesToHours(this.personTimeSpentMap[taskId]?.duration || 0, 2)
+      }
+
+      return minutesToHours(
+        this.personManualTimeSpentMap[taskId]?.duration || 0,
+        2
+      )
     },
 
     displayDurationForTask(taskId) {
       if (this.user.id !== this.person.id) {
-        return this.personTimeSpentMap[taskId]
-          ? this.personTimeSpentMap[taskId].duration / 60
-          : 0
+        return minutesToHours(this.personTimeSpentMap[taskId]?.duration || 0, 2)
       }
 
-      const manualDuration = this.personTimeSpentMap[taskId]?.duration || 0
+      const manualDuration =
+        this.personManualTimeSpentMap[taskId]?.duration || 0
       const timerDuration = this.trackedMinutesByTask[String(taskId)] || 0
-      return (manualDuration + timerDuration) / 60
+      return minutesToHours(manualDuration + timerDuration, 2)
     },
 
     async onDateChanged(date) {

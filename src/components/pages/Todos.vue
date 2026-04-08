@@ -9,7 +9,10 @@
           :tabs="todoTabs"
         />
 
-        <div class="flexrow" v-show="!isActiveTab('daysoff')">
+        <div
+          class="flexrow"
+          v-show="!isActiveTab('daysoff') && !isActiveTab('timers')"
+        >
           <search-field
             ref="todos-search-field"
             class="flexrow-item search-field"
@@ -43,7 +46,10 @@
             v-model="currentSort"
           />
         </div>
-        <div class="query-list" v-if="!isActiveTab('daysoff')">
+        <div
+          class="query-list"
+          v-if="!isActiveTab('daysoff') && !isActiveTab('timers')"
+        >
           <search-query-list
             :queries="todoSearchQueries"
             type="todo"
@@ -111,8 +117,8 @@
           :is-error="isTodosLoadingError"
           :days-off="daysOff"
           :day-off-error="dayOffError"
-          :time-spent-map="timeSpentMap"
-          :time-spent-total="timeSpentTotal"
+          :time-spent-map="manualTimeSpentMap"
+          :time-spent-total="manualTimeSpentTotal"
           :active-timer-task-id="currentTimer?.task_id || ''"
           :active-timer="currentTimer"
           :display-duration-for-task="displayDurationForTask"
@@ -137,6 +143,8 @@
           @unset-day-off="onUnsetDayOff"
           v-if="isActiveTab('daysoff')"
         />
+
+        <timers embedded v-if="isActiveTab('timers')" />
       </div>
     </div>
 
@@ -155,7 +163,7 @@ import { timeMixin } from '@/components/mixins/time'
 import { searchMixin } from '@/components/mixins/search'
 
 import { sortTaskStatuses } from '@/lib/sorting'
-import { formatSimpleDateUTC, parseDate } from '@/lib/time'
+import { formatSimpleDateUTC, minutesToHours, parseDate } from '@/lib/time'
 import { getTrackedMinutesByTaskForDate } from '@/lib/timers'
 
 import Combobox from '@/components/widgets/Combobox.vue'
@@ -166,6 +174,7 @@ import RouteSectionTabs from '@/components/widgets/RouteSectionTabs.vue'
 import SearchField from '@/components/widgets/SearchField.vue'
 import SearchQueryList from '@/components/widgets/SearchQueryList.vue'
 import TaskInfo from '@/components/sides/TaskInfo.vue'
+import Timers from '@/components/pages/Timers.vue'
 import TimesheetList from '@/components/lists/TimesheetList.vue'
 import TodosList from '@/components/lists/TodosList.vue'
 import UserCalendar from '@/components/widgets/UserCalendar.vue'
@@ -184,6 +193,7 @@ export default {
     SearchField,
     SearchQueryList,
     TaskInfo,
+    Timers,
     TimesheetList,
     TodosList,
     UserCalendar
@@ -251,6 +261,8 @@ export default {
       'taskTypeMap',
       'timers',
       'currentTimer',
+      'manualTimeSpentMap',
+      'manualTimeSpentTotal',
       'timeSpentMap',
       'timeSpentTotal',
       'todoListScrollPosition',
@@ -345,6 +357,10 @@ export default {
         {
           label: this.$t('timesheets.title'),
           name: 'timesheets'
+        },
+        {
+          label: this.$t('timers.title'),
+          name: 'timers'
         },
         {
           label: this.$t('days_off.title'),
@@ -466,6 +482,7 @@ export default {
         'daysoff',
         'done',
         'pending',
+        'timers',
         'timesheets'
       ]
       const currentSection = this.$route.query.section
@@ -489,6 +506,14 @@ export default {
       }
 
       this.clearSelectedTasks()
+      this.scrollToTop()
+    },
+
+    scrollToTop() {
+      this.$nextTick(() => {
+        const scrollContainer = this.$el?.closest('.column') || this.$el
+        scrollContainer?.scrollTo?.({ top: 0 })
+      })
     },
 
     onSearchChange() {
@@ -559,13 +584,13 @@ export default {
     },
 
     manualDurationForTask(taskId) {
-      return (this.timeSpentMap[taskId]?.duration || 0) / 60
+      return minutesToHours(this.manualTimeSpentMap[taskId]?.duration || 0, 2)
     },
 
     displayDurationForTask(taskId) {
-      const manualDuration = this.timeSpentMap[taskId]?.duration || 0
+      const manualDuration = this.manualTimeSpentMap[taskId]?.duration || 0
       const timerDuration = this.trackedMinutesByTask[String(taskId)] || 0
-      return (manualDuration + timerDuration) / 60
+      return minutesToHours(manualDuration + timerDuration, 2)
     },
 
     async onStartTimer(task) {

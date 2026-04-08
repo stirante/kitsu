@@ -22,7 +22,11 @@ export const getTimerEndMoment = (timer, now = moment.utc()) => {
 export const getTimerDurationMinutes = (timer, now = moment.utc()) => {
   return Math.max(
     0,
-    getTimerEndMoment(timer, now).diff(getTimerStartMoment(timer), 'minutes')
+    getTimerEndMoment(timer, now).diff(
+      getTimerStartMoment(timer),
+      'minutes',
+      true
+    )
   )
 }
 
@@ -42,7 +46,7 @@ export const getTimerDateOverlapMinutes = (
   const overlapStart = moment.max(start, dayStart)
   const overlapEnd = moment.min(end, dayEnd)
 
-  return Math.max(0, overlapEnd.diff(overlapStart, 'minutes'))
+  return Math.max(0, overlapEnd.diff(overlapStart, 'minutes', true))
 }
 
 export const isTimerVisibleForDate = (
