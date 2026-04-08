@@ -91,8 +91,8 @@ export default {
   async mounted() {
     const config = await this.setMainConfig()
     this.setupDarkTheme()
-    this.setupCrisp(config)
-    this.setupSentry(config)
+    this.setupCrisp(config || {})
+    this.setupSentry(config || {})
     this.setupAuthChannel()
   },
 
