@@ -136,9 +136,17 @@
                       </div>
                     </template>
                   </td>
-                  <td>
+                  <td :title="timerDayTooltip(timer)">
                     {{ formatDuration(timerDuration(timer)) }}
                     {{ durationUnitLabel }}
+                    <span
+                      v-if="isTimerSplitAcrossDays(timer)"
+                      class="timer-total"
+                    >
+                      ({{ $t('timers.total') }}:
+                      {{ formatDuration(timerTotalDuration(timer)) }}
+                      {{ durationUnitLabel }})
+                    </span>
                   </td>
                   <td>
                     {{
@@ -182,6 +190,7 @@ import moment from 'moment-timezone'
 import { mapGetters, mapActions } from 'vuex'
 import {
   getTimerDateOverlapMinutes,
+  getTimerDurationMinutes,
   getTrackedMinutesByTaskForDate,
   isSameTaskId
 } from '@/lib/timers'
@@ -377,6 +386,26 @@ export default {
         this.timezone,
         moment.utc()
       )
+    },
+
+    timerTotalDuration(timer) {
+      // Referencing the tick variable here is a hack to make Vue recompute this
+      this.tick
+      return getTimerDurationMinutes(timer, moment.utc())
+    },
+
+    isTimerSplitAcrossDays(timer) {
+      return (
+        Math.round(this.timerTotalDuration(timer)) !==
+        Math.round(this.timerDuration(timer))
+      )
+    },
+
+    timerDayTooltip(timer) {
+      return this.$t('timers.day_slice_tooltip', {
+        day: `${this.formatDuration(this.timerDuration(timer))} ${this.durationUnitLabel}`,
+        total: `${this.formatDuration(this.timerTotalDuration(timer))} ${this.durationUnitLabel}`
+      })
     },
 
     taskDurationWithRunning(taskId) {
@@ -632,5 +661,11 @@ td.name {
 .time-spent-total {
   font-size: 1.6em;
   line-height: 1.7em;
+}
+
+.timer-total {
+  opacity: 0.6;
+  font-size: 0.85em;
+  white-space: nowrap;
 }
 </style>

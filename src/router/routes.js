@@ -132,6 +132,7 @@ export const routes = [
           next(nextPath)
         } else {
           timezone.setTimezone()
+          timezone.ensureUserTimezone()
           lang.setLocale(userStore.state.user.locale)
           sentry.setContext(
             peopleStore.state.organisation,
@@ -172,6 +173,7 @@ export const routes = [
           next(nextPath)
         } else {
           timezone.setTimezone()
+          timezone.ensureUserTimezone()
           lang.setLocale(userStore.state.user.locale)
           sentry.setContext(
             peopleStore.state.organisation,

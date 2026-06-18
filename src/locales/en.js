@@ -1977,7 +1977,19 @@ export default {
     running_today: 'Day Total',
     no_timer: 'No timers',
     duration: 'Duration',
+    total: 'Total',
+    day_slice_tooltip:
+      'This day: {day}. Total for this timer (across days): {total}.',
     estimated: 'Estimated'
+  },
+
+  timezone: {
+    mismatch_title: 'Timezone mismatch',
+    mismatch_text:
+      'Your profile timezone is {profile}, but your browser is currently in {browser}. Time tracking is bucketed per day using your profile timezone, so these may show different times. Do you want to update your profile to {browser}?',
+    update: 'Update to {browser}',
+    keep: 'Keep {profile}',
+    dont_ask_again: "Don't ask again"
   },
 
   days_off: {

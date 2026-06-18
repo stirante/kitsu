@@ -112,6 +112,10 @@ export default {
     return client.pput(`/api/data/persons/${person.id}`, data)
   },
 
+  updateTimezone(personId, timezone) {
+    return client.pput(`/api/data/persons/${personId}`, { timezone })
+  },
+
   deletePerson(person) {
     return client.pdel(`/api/data/persons/${person.id}?force=true`)
   },
