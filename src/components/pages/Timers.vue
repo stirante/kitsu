@@ -28,6 +28,7 @@
             <date-field
               :can-delete="false"
               :with-margin="false"
+              :max-date="today"
               utc
               v-model="selectedDate"
             />
