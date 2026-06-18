@@ -1894,6 +1894,9 @@ td.fps {
 }
 
 .resizable {
+  th.description {
+    position: relative;
+  }
   th {
     .resizable-knob {
       position: absolute;
